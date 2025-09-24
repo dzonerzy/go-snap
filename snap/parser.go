@@ -183,14 +183,18 @@ func (p *Parser) parseArgument(arg string, allArgs []string) error {
         }
         return p.createUnknownCommandError(name)
     case p.state == StateCommandFlags:
-        // In a command context: treat the token as a subcommand only if it exists
-        // under the current command; otherwise it's a positional argument.
-        if p.currentCmd != nil && p.currentCmd.subcommands != nil {
+        // In a command context: if the current command defines subcommands,
+        // an unknown non-flag token should be treated as an unknown subcommand
+        // to enable suggestions (rather than silently becoming a positional arg).
+        if p.currentCmd != nil && p.currentCmd.subcommands != nil && len(p.currentCmd.subcommands) > 0 {
             name := intern.InternBytes(argBytes)
             if _, ok := p.currentCmd.subcommands[name]; ok {
                 return p.parseCommand(argBytes)
             }
+            // Unknown token while subcommands exist -> surface an error with suggestion
+            return p.createUnknownCommandError(name)
         }
+        // No subcommands defined -> treat as positional argument
         return p.parsePositionalArg(argBytes)
 
     case p.state == StatePositionalArgs:
