@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="go-snap bolt mark">
+  <defs>
+    <linearGradient id="boltGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#19E3A6"/>
+      <stop offset="100%" stop-color="#00ADD8"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#041018" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+  <!-- Terminal window bezel -->
+  <rect x="8" y="8" width="240" height="240" rx="28" fill="#0B1F2A"/>
+  <!-- window dots -->
+  <circle cx="28" cy="28" r="4" fill="#214157"/>
+  <circle cx="44" cy="28" r="4" fill="#214157"/>
+  <circle cx="60" cy="28" r="4" fill="#214157"/>
+  <!-- Stylized lightning bolt (center) -->
+  <path d="M145 28 L102 118 H142 L116 228 L159 140 H119 Z" fill="url(#boltGrad)" filter="url(#softShadow)"/>
+</svg>
+

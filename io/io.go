@@ -1,0 +1,148 @@
+package snapio
+
+import (
+	stdio "io"
+	"os"
+	"runtime"
+)
+
+// platformIO is implemented per OS in io_unix.go and io_windows.go
+type platformIO interface {
+	isTerminal(*os.File) bool
+	termSize(*os.File) (width, height int, ok bool)
+	enableVirtualTerminal() bool
+	vtEnabled() bool
+}
+
+// newPlatformIO is provided by platform files
+
+// IOManager centralizes IO and terminal capabilities
+type IOManager struct {
+	in  stdio.Reader
+	out stdio.Writer
+	err stdio.Writer
+
+	forceColor bool
+	noColor    bool
+
+	p platformIO
+}
+
+// New returns a manager bound to process stdio
+func New() *IOManager {
+	m := &IOManager{in: os.Stdin, out: os.Stdout, err: os.Stderr, p: newPlatformIO()}
+	return m
+}
+
+// Fluent setters
+func (m *IOManager) WithIn(r stdio.Reader) *IOManager  { m.in = r; return m }
+func (m *IOManager) WithOut(w stdio.Writer) *IOManager { m.out = w; return m }
+func (m *IOManager) WithErr(w stdio.Writer) *IOManager { m.err = w; return m }
+func (m *IOManager) ForceColor() *IOManager            { m.forceColor = true; m.noColor = false; return m }
+func (m *IOManager) NoColor() *IOManager               { m.noColor = true; m.forceColor = false; return m }
+func (m *IOManager) ColorAuto() *IOManager             { m.noColor = false; m.forceColor = false; return m }
+
+// Accessors
+func (m *IOManager) In() stdio.Reader  { return m.in }
+func (m *IOManager) Out() stdio.Writer { return m.out }
+func (m *IOManager) Err() stdio.Writer { return m.err }
+
+// Capabilities
+func (m *IOManager) IsTTY() bool         { return m.p.isTerminal(os.Stdout) }
+func (m *IOManager) IsInteractive() bool { return m.p.isTerminal(os.Stdin) && os.Getenv("CI") == "" }
+func (m *IOManager) Width() int {
+	if w, _, ok := m.p.termSize(os.Stdout); ok && w > 0 {
+		return w
+	}
+	if w2, _ := fallbackTermSizeFromEnv(); w2 > 0 {
+		return w2
+	}
+	return 80
+}
+func (m *IOManager) Height() int {
+	if _, h, ok := m.p.termSize(os.Stdout); ok && h > 0 {
+		return h
+	}
+	if _, h2 := fallbackTermSizeFromEnv(); h2 > 0 {
+		return h2
+	}
+	return 24
+}
+func (m *IOManager) IsPiped() bool      { return !m.p.isTerminal(os.Stdin) }
+func (m *IOManager) IsRedirected() bool { return !m.p.isTerminal(os.Stdout) }
+
+// SupportsColor determines ANSI color capability (0=none,1=16,2=256,3=16m via truecolor)
+func (m *IOManager) SupportsColor() bool {
+	if m.noColor || os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+	if m.forceColor || os.Getenv("FORCE_COLOR") != "" {
+		return true
+	}
+	if goos() == "windows" {
+		return m.p.vtEnabled()
+	}
+	// Unix: TTY and TERM not dumb
+	if !m.IsTTY() {
+		return false
+	}
+	term := os.Getenv("TERM")
+	return term != "" && term != "dumb"
+}
+
+// ColorLevel: 0 none, 1 basic, 2 256, 3 truecolor
+func (m *IOManager) ColorLevel() int {
+	if !m.SupportsColor() {
+		return 0
+	}
+	if os.Getenv("COLORTERM") == "truecolor" {
+		return 3
+	}
+	if contains(os.Getenv("TERM"), "256color") {
+		return 2
+	}
+	if goos() == "windows" && m.p.vtEnabled() {
+		return 2
+	}
+	return 1
+}
+
+// EnableVirtualTerminal tries to enable ANSI processing on Windows consoles
+func (m *IOManager) EnableVirtualTerminal() bool { return m.p.enableVirtualTerminal() }
+
+// ANSI helpers
+// Colorize wraps s with the given ANSI SGR code (e.g., "31" for red) and a
+// trailing reset ("0m"). If color is not supported, it returns s unchanged.
+func (m *IOManager) Colorize(s, code string) string {
+    if !m.SupportsColor() {
+        return s
+    }
+    return "\x1b[" + code + "m" + s + "\x1b[0m"
+}
+// Bold returns s in bold when color is supported; otherwise s unchanged.
+func (m *IOManager) Bold(s string) string      { return m.Colorize(s, "1") }
+// Faint returns s in faint intensity when supported; otherwise s unchanged.
+func (m *IOManager) Faint(s string) string     { return m.Colorize(s, "2") }
+// Italic returns s in italic when supported; otherwise s unchanged.
+func (m *IOManager) Italic(s string) string    { return m.Colorize(s, "3") }
+// Underline returns s underlined when supported; otherwise s unchanged.
+func (m *IOManager) Underline(s string) string { return m.Colorize(s, "4") }
+
+// helpers
+func contains(s, sub string) bool {
+	if len(sub) == 0 {
+		return true
+	}
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
+func goos() string {
+	if v := os.Getenv("SNAP_GOOS"); v != "" {
+		return v
+	}
+	return runtime.GOOS
+}

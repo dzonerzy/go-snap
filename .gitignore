@@ -1,0 +1,62 @@
+# ---- Go: common ignores ----
+
+# Build outputs
+bin/
+build/
+dist/
+out/
+
+# Compiled binaries / objects
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+*.a
+*.o
+
+# Coverage & profiling
+*.cov
+*.cover
+*.coverprofile
+coverage.*
+coverage/
+profile.*
+cpu.out
+mem.out
+trace.out
+bench-*.txt
+*.pprof
+*.prof
+
+# Go workspace files (often developer-local)
+go.work
+go.work.sum
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Temp
+.tmp/
+.temp/
+*.tmp
+
+# Optional vendor (uncomment if you do not vendor in this repo)
+# vendor/
+
+# ---- Project-specific excludes ----
+.claude/
+.code/
+.gocache/
+CLAUDE.md
+SPECS.md
+STRUCTURE.md
+IDEA.md
+
