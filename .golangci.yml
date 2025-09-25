@@ -1,0 +1,36 @@
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - govet
+    - revive
+    - gocritic
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - gofmt
+    - goimports
+    - misspell
+
+linters-settings:
+  gocritic:
+    disabled-checks:
+      - commentFormatting
+  revive:
+    rules:
+      - name: exported
+      - name: var-naming
+      - name: if-return
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+issues:
+  exclude-use-default: false
+  exclude-rules:
+    - linters: [revive]
+      text: "stutters; consider calling this"
+    - linters: [gocognit]
+      text: "cognitive complexity"
