@@ -14,6 +14,15 @@ app.ErrorHandler().
     Handle(snap.ErrorTypeValidation, func(e *snap.CLIError) *snap.CLIError { return e })
 ```
 
+Show help on error
+- You can print contextual help automatically after an error (e.g., unknown flag/command):
+
+```go
+app.ErrorHandler().ShowHelpOnError(true)
+```
+
+This displays either app-level help or the current command's help depending on where parsing failed.
+
 Group violations
 - Errors of type `flag_group_violation` include contextual help rendering for the offending group.
 

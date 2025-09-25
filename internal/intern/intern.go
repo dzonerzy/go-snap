@@ -81,8 +81,8 @@ func (si *StringInterner) PreIntern(strings []string) {
 	}
 }
 
-// Stats returns interning statistics for monitoring
-func (si *StringInterner) Stats() (count int) {
+// Stats returns the number of interned strings for monitoring.
+func (si *StringInterner) Stats() int {
 	si.mutex.RLock()
 	defer si.mutex.RUnlock()
 	return len(si.strings)
@@ -122,10 +122,11 @@ func bytesToString(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
 }
 
-// Global string interner for go-snap CLI parsing
-// Pre-initialized with common flag names for optimal performance
+// GlobalInterner is the process-wide string interner used for go-snap CLI parsing.
+// It is pre-initialized with common flag names for optimal performance.
 var GlobalInterner *StringInterner
 
+//nolint:gochecknoinits // Global interner requires init for pre-interning
 func init() {
 	GlobalInterner = NewStringInterner(128)
 	GlobalInterner.PreIntern(CommonFlagNames)
@@ -139,11 +140,15 @@ func Intern(s string) string {
 }
 
 // InternBytes interns a byte slice using the global interner
+//
+//nolint:revive // keep name for public API symmetry with Intern/InternByte
 func InternBytes(b []byte) string {
 	return GlobalInterner.InternBytes(b)
 }
 
 // InternByte interns a single byte using the global interner
+//
+//nolint:revive // keep name for public API symmetry with Intern/InternBytes
 func InternByte(b byte) string {
 	return GlobalInterner.InternByte(b)
 }

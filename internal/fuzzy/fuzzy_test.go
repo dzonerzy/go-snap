@@ -1,3 +1,4 @@
+//nolint:testpackage // using package name 'fuzzy' to access unexported fields for testing
 package fuzzy
 
 import (
@@ -176,10 +177,10 @@ func TestMatcher_ScoreCalculation(t *testing.T) {
 	matcher := NewMatcher(3)
 
 	tests := []struct {
-		input      string
-		candidate  string
-		minScore   float64 // Minimum expected score
-		maxScore   float64 // Maximum expected score
+		input     string
+		candidate string
+		minScore  float64 // Minimum expected score
+		maxScore  float64 // Maximum expected score
 	}{
 		{
 			input:     "help",

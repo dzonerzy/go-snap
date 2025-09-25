@@ -1,10 +1,11 @@
+//nolint:testpackage // using package name 'pool' to access unexported fields for testing
 package pool
 
 import (
-    "runtime"
-    "sync"
-    "testing"
-    "time"
+	"runtime"
+	"sync"
+	"testing"
+	"time"
 )
 
 func TestPool_Basic(t *testing.T) {
@@ -255,6 +256,7 @@ func TestParseResultPool(t *testing.T) {
 	result1 := pool.Get()
 	if result1 == nil {
 		t.Fatal("Expected non-nil ParseResult")
+		return // appease staticcheck: avoid potential nil deref in subsequent code
 	}
 
 	// Verify initial state

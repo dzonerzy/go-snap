@@ -16,10 +16,10 @@ type Command struct {
 	flags       map[string]*Flag
 	shortFlags  map[rune]*Flag // O(1) lookup for short flags
 	subcommands map[string]*Command
-	flagGroups  []*FlagGroup   // Flag groups for validation
+	flagGroups  []*FlagGroup // Flag groups for validation
 	Action      ActionFunc
-    middleware  []middleware.Middleware // Command-level middleware
-    wrapper     *WrapperSpec            // Optional wrapper configuration
+	middleware  []middleware.Middleware // Command-level middleware
+	wrapper     *WrapperSpec            // Optional wrapper configuration
 }
 
 // Name returns the command name (implements middleware.Command interface)

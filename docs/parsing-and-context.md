@@ -24,6 +24,7 @@ Context API (`snap/context.go`)
 Help/version handling
 - Global `--help/--version` handled if enabled on app.
 - Command-level `--help` always available.
+- Short alias `-h` is provided by default for help at both app and command level if not already taken by another flag. If you bind `-h` yourself, your flag wins and help remains available via `--help`.
 
 Notes
 - Float parsing in CLI path is implemented for common cases; env parsing of floats uses `strconv.ParseFloat`.

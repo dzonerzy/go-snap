@@ -2,9 +2,9 @@ package middleware
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/dzonerzy/go-snap/internal/pool"
@@ -74,7 +74,6 @@ func Logger(options ...MiddlewareOption) Middleware {
 	}
 }
 
-
 // getLogLevel determines log level based on error status
 func getLogLevel(err error) string {
 	if err != nil {
@@ -97,9 +96,11 @@ func logRequest(config *MiddlewareConfig, info *RequestInfo, level string) {
 	}
 
 	// Format and write log entry
-	switch config.LogFormat {
+	switch config.LogFormat { // exhaustive over LogFormat
 	case LogFormatJSON:
 		writeJSONLog(writer, info, level, config)
+	case LogFormatText:
+		writeTextLog(writer, info, level, config)
 	default:
 		writeTextLog(writer, info, level, config)
 	}
@@ -171,7 +172,8 @@ func writeTextLog(writer io.Writer, info *RequestInfo, level string, config *Mid
 
 	*buf = append(*buf, '\n')
 
-	// Write directly from buffer
+	// Write directly from buffer; ignore write errors (logging best-effort)
+	//nolint:errcheck,gosec // Logging is best-effort; ignore write errors.
 	writer.Write(*buf)
 }
 
@@ -193,26 +195,26 @@ func writeJSONLog(writer io.Writer, info *RequestInfo, level string, config *Mid
 
 	if info.Duration > 0 {
 		*buf = append(*buf, `,"duration_ms":`...)
-		*buf = append(*buf, fmt.Sprintf("%d", info.Duration.Milliseconds())...)
+		*buf = append(*buf, strconv.FormatInt(info.Duration.Milliseconds(), 10)...)
 	}
 
-    if config.IncludeArgs && len(info.Args) > 0 {
-        *buf = append(*buf, `,"args":[`...)
-        for i, arg := range info.Args {
-            if i > 0 {
-                *buf = append(*buf, ',')
-            }
-            enc, _ := json.Marshal(arg)
-            *buf = append(*buf, enc...)
-        }
-        *buf = append(*buf, ']')
-    }
+	if config.IncludeArgs && len(info.Args) > 0 {
+		*buf = append(*buf, `,"args":[`...)
+		for i, arg := range info.Args {
+			if i > 0 {
+				*buf = append(*buf, ',')
+			}
+			enc, _ := json.Marshal(arg)
+			*buf = append(*buf, enc...)
+		}
+		*buf = append(*buf, ']')
+	}
 
-    if info.Error != nil {
-        *buf = append(*buf, `,"error":`...)
-        enc, _ := json.Marshal(info.Error.Error())
-        *buf = append(*buf, enc...)
-    }
+	if info.Error != nil {
+		*buf = append(*buf, `,"error":`...)
+		enc, _ := json.Marshal(info.Error.Error())
+		*buf = append(*buf, enc...)
+	}
 
 	// For metadata, fall back to json.Marshal since it's complex and rarely used
 	if len(info.Metadata) > 0 {
@@ -226,6 +228,7 @@ func writeJSONLog(writer io.Writer, info *RequestInfo, level string, config *Mid
 	*buf = append(*buf, '}')
 	*buf = append(*buf, '\n')
 
+	//nolint:errcheck,gosec // Logging is best-effort; ignore write errors.
 	writer.Write(*buf)
 }
 
@@ -273,9 +276,11 @@ func logRequestToWriter(writer io.Writer, config *MiddlewareConfig, info *Reques
 		return
 	}
 
-	switch config.LogFormat {
+	switch config.LogFormat { // exhaustive over LogFormat
 	case LogFormatJSON:
 		writeJSONLog(writer, info, level, config)
+	case LogFormatText:
+		writeTextLog(writer, info, level, config)
 	default:
 		writeTextLog(writer, info, level, config)
 	}

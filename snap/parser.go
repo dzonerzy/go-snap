@@ -1,16 +1,16 @@
 package snap
 
 import (
-    "fmt"
-    "math"
-    "os"
-    "slices"
-    "strconv"
-    "time"
-    "unsafe"
+	"fmt"
+	"math"
+	"os"
+	"slices"
+	"strconv"
+	"time"
+	"unsafe"
 
-    "github.com/dzonerzy/go-snap/internal/intern"
-    "github.com/dzonerzy/go-snap/internal/pool"
+	"github.com/dzonerzy/go-snap/internal/intern"
+	"github.com/dzonerzy/go-snap/internal/pool"
 )
 
 // Pre-allocated byte slices for common values to avoid allocations
@@ -31,11 +31,9 @@ const (
 	StateError
 )
 
-
-
 // ParseResult contains the parsed command structure without allocations
 type ParseResult struct {
-	Command *Command
+	Command           *Command
 	*pool.ParseResult // Embed the pooled ParseResult
 
 	// Slices that need cleanup
@@ -51,7 +49,6 @@ type Parser struct {
 	argsBuffer  []string     // Reusable slice for arguments
 	flagsBuffer []ParsedFlag // Reusable slice for parsed flags
 
-
 	// Parser state
 	state      ParseState
 	position   int
@@ -65,7 +62,6 @@ type Parser struct {
 
 	// Pre-allocated result for zero allocations
 	reusableResult *ParseResult
-
 
 	// Reusable buffer for levenshtein distance calculation (avoid allocations in error paths)
 	levenshteinBuffer []int
@@ -98,11 +94,9 @@ func NewParser(app *App) *Parser {
 		reusableError:     &ParseError{},             // Pre-allocate error for reuse
 	}
 
-
 	// Use pooled result instead of pre-allocated one
 	pooledResult := pool.GetParseResult()
 	p.reusableResult = &ParseResult{ParseResult: pooledResult}
-
 
 	// Removed: Pre-allocated boxed values approach
 	// Note: String interning is now handled by internal/intern package
@@ -147,19 +141,19 @@ func (p *Parser) Parse(args []string) (*ParseResult, error) {
 
 // parseArgument handles a single argument based on parser state
 func (p *Parser) parseArgument(arg string, allArgs []string) error {
-    // Convert to byte slice for zero-allocation operations
-    argBytes := stringToBytes(arg)
+	// Convert to byte slice for zero-allocation operations
+	argBytes := stringToBytes(arg)
 
-    // If already in positional mode, treat everything as positional
-    if p.state == StatePositionalArgs {
-        return p.parsePositionalArg(argBytes)
-    }
+	// If already in positional mode, treat everything as positional
+	if p.state == StatePositionalArgs {
+		return p.parsePositionalArg(argBytes)
+	}
 
-    // "--" terminates flag parsing; subsequent tokens are positional args
-    if len(argBytes) == 2 && argBytes[0] == '-' && argBytes[1] == '-' {
-        p.state = StatePositionalArgs
-        return nil
-    }
+	// "--" terminates flag parsing; subsequent tokens are positional args
+	if len(argBytes) == 2 && argBytes[0] == '-' && argBytes[1] == '-' {
+		p.state = StatePositionalArgs
+		return nil
+	}
 
 	switch {
 	case len(argBytes) >= 2 && argBytes[0] == '-' && argBytes[1] == '-':
@@ -170,39 +164,39 @@ func (p *Parser) parseArgument(arg string, allArgs []string) error {
 		// Short flag(s): -f or -abc
 		return p.parseShortFlag(argBytes, allArgs)
 
-    case p.state == StateInit || p.state == StateGlobalFlags:
-        // Top-level token: treat as a command only if it exists; otherwise,
-        // when an app-level wrapper is configured, treat it as a positional arg
-        // to be forwarded to the wrapper.
-        name := intern.InternBytes(argBytes)
-        if cmd := p.findCommand(name); cmd != nil {
-            return p.parseCommand(argBytes)
-        }
-        if p.app != nil && p.app.defaultWrapper != nil {
-            return p.parsePositionalArg(argBytes)
-        }
-        return p.createUnknownCommandError(name)
-    case p.state == StateCommandFlags:
-        // In a command context: if the current command defines subcommands,
-        // an unknown non-flag token should be treated as an unknown subcommand
-        // to enable suggestions (rather than silently becoming a positional arg).
-        if p.currentCmd != nil && p.currentCmd.subcommands != nil && len(p.currentCmd.subcommands) > 0 {
-            name := intern.InternBytes(argBytes)
-            if _, ok := p.currentCmd.subcommands[name]; ok {
-                return p.parseCommand(argBytes)
-            }
-            // Unknown token while subcommands exist -> surface an error with suggestion
-            return p.createUnknownCommandError(name)
-        }
-        // No subcommands defined -> treat as positional argument
-        return p.parsePositionalArg(argBytes)
+	case p.state == StateInit || p.state == StateGlobalFlags:
+		// Top-level token: treat as a command only if it exists; otherwise,
+		// when an app-level wrapper is configured, treat it as a positional arg
+		// to be forwarded to the wrapper.
+		name := intern.InternBytes(argBytes)
+		if cmd := p.findCommand(name); cmd != nil {
+			return p.parseCommand(argBytes)
+		}
+		if p.app != nil && p.app.defaultWrapper != nil {
+			return p.parsePositionalArg(argBytes)
+		}
+		return p.createUnknownCommandError(name)
+	case p.state == StateCommandFlags:
+		// In a command context: if the current command defines subcommands,
+		// an unknown non-flag token should be treated as an unknown subcommand
+		// to enable suggestions (rather than silently becoming a positional arg).
+		if p.currentCmd != nil && p.currentCmd.subcommands != nil && len(p.currentCmd.subcommands) > 0 {
+			name := intern.InternBytes(argBytes)
+			if _, ok := p.currentCmd.subcommands[name]; ok {
+				return p.parseCommand(argBytes)
+			}
+			// Unknown token while subcommands exist -> surface an error with suggestion
+			return p.createUnknownCommandError(name)
+		}
+		// No subcommands defined -> treat as positional argument
+		return p.parsePositionalArg(argBytes)
 
-    case p.state == StatePositionalArgs:
-        return p.parsePositionalArg(argBytes)
-    default:
-        // Positional argument
-        return p.parsePositionalArg(argBytes)
-    }
+	case p.state == StatePositionalArgs:
+		return p.parsePositionalArg(argBytes)
+	default:
+		// Positional argument
+		return p.parsePositionalArg(argBytes)
+	}
 }
 
 // parseLongFlag parses long flags (--flag, --flag=value) with zero allocations
@@ -226,26 +220,27 @@ func (p *Parser) parseLongFlag(argBytes []byte, allArgs []string) error {
 	// Intern flag name to avoid string allocation
 	flagName := intern.InternBytes(nameBytes)
 
-    // Look up flag definition
-    flagDef := p.findFlag(flagName)
-    if flagDef == nil {
-        // Wrapper support: forward unknown flags as positional args when enabled
-        if p.currentCmd != nil && p.currentCmd.wrapper != nil && p.currentCmd.wrapper.ForwardUnknown {
-            // Treat the whole token as positional
-            return p.parsePositionalArg(argBytes)
-        }
-        if p.currentCmd == nil && p.app != nil && p.app.defaultWrapper != nil && p.app.defaultWrapper.ForwardUnknown {
-            return p.parsePositionalArg(argBytes)
-        }
-        return p.createUnknownFlagError(flagName)
-    }
+	// Look up flag definition
+	flagDef := p.findFlag(flagName)
+	if flagDef == nil {
+		// Wrapper support: forward unknown flags as positional args when enabled
+		if p.currentCmd != nil && p.currentCmd.wrapper != nil && p.currentCmd.wrapper.ForwardUnknown {
+			// Treat the whole token as positional
+			return p.parsePositionalArg(argBytes)
+		}
+		if p.currentCmd == nil && p.app != nil && p.app.defaultWrapper != nil && p.app.defaultWrapper.ForwardUnknown {
+			return p.parsePositionalArg(argBytes)
+		}
+		return p.createUnknownFlagError(flagName)
+	}
 
 	// Direct parsing to typed maps to avoid interface{} boxing
 
 	// Store parsed flag without allocation - direct to typed maps
 	if hasValue {
 		return p.storeFlagValue(flagName, flagDef, valueBytes, flagDef.IsGlobal())
-	} else if flagDef.RequiresValue() {
+	}
+	if flagDef.RequiresValue() {
 		// Value should be next argument - get it and parse directly
 		if p.position+1 >= len(allArgs) {
 			return &ParseError{Type: ErrorTypeInvalidValue, Message: "missing required value"}
@@ -254,50 +249,55 @@ func (p *Parser) parseLongFlag(argBytes []byte, allArgs []string) error {
 		// Advance position and get next argument
 		p.position++
 		nextArg := allArgs[p.position]
-		valueBytes := stringToBytes(nextArg)
+		valueBytes = stringToBytes(nextArg)
 		return p.storeFlagValue(flagName, flagDef, valueBytes, flagDef.IsGlobal())
-	} else if flagDef.Type == FlagTypeBool {
+	}
+	if flagDef.Type == FlagTypeBool {
 		// Boolean flag without value - defaults to true
 		return p.storeFlagValue(flagName, flagDef, trueBoolBytes, flagDef.IsGlobal())
-	} else {
-		// Non-boolean flag without value - this is an error
-		return &ParseError{
-			Type:    ErrorTypeMissingValue,
-			Message: "flag requires a value: --" + flagName,
-			Flag:    flagName,
-		}
+	}
+	// Non-boolean flag without value - this is an error
+	return &ParseError{
+		Type:    ErrorTypeMissingValue,
+		Message: "flag requires a value: --" + flagName,
+		Flag:    flagName,
 	}
 }
 
 // parseShortFlag parses short flags (-f, -abc) with zero allocations
+//
+//nolint:gocognit // Handles many short-flag shapes and error paths compactly.
 func (p *Parser) parseShortFlag(argBytes []byte, allArgs []string) error {
 	// Skip the '-' prefix
 	flagBytes := argBytes[1:]
 
 	// Handle combined short flags (-abc = -a -b -c)
+parseShort:
 	for i, flagRune := range flagBytes {
 		// Convert rune to flag name
 		flagName := intern.InternByte(flagRune)
 
-        // Look up flag definition
-        flagDef := p.findFlag(flagName)
-        if flagDef == nil {
-            // Wrapper support: forward unknown short flags when enabled
-            if p.currentCmd != nil && p.currentCmd.wrapper != nil && p.currentCmd.wrapper.ForwardUnknown {
-                return p.parsePositionalArg(argBytes)
-            }
-            if p.currentCmd == nil && p.app != nil && p.app.defaultWrapper != nil && p.app.defaultWrapper.ForwardUnknown {
-                return p.parsePositionalArg(argBytes)
-            }
-            return p.createUnknownFlagError(flagName)
-        }
+		// Look up flag definition
+		flagDef := p.findFlag(flagName)
+		if flagDef == nil {
+			// Wrapper support: forward unknown short flags when enabled
+			if p.currentCmd != nil && p.currentCmd.wrapper != nil && p.currentCmd.wrapper.ForwardUnknown {
+				return p.parsePositionalArg(argBytes)
+			}
+			if p.currentCmd == nil && p.app != nil && p.app.defaultWrapper != nil &&
+				p.app.defaultWrapper.ForwardUnknown {
+				return p.parsePositionalArg(argBytes)
+			}
+			return p.createUnknownFlagError(flagName)
+		}
 
 		// Variables removed since we're using direct typed parsing
 
 		// Direct typed parsing - moved to storeFlagValue calls below
 
 		// Store parsed flag - use different approach based on flag type
-		if flagDef.RequiresValue() {
+		switch {
+		case flagDef.RequiresValue():
 			if i == len(flagBytes)-1 {
 				// Value is next argument - get it and parse directly
 				if p.position+1 >= len(allArgs) {
@@ -312,23 +312,22 @@ func (p *Parser) parseShortFlag(argBytes []byte, allArgs []string) error {
 				if err != nil {
 					return err
 				}
-				break
-			} else {
-				// Value is rest of current argument
-				valueBytes := flagBytes[i+1:]
-				err := p.storeFlagValue(flagDef.Name, flagDef, valueBytes, flagDef.IsGlobal())
-				if err != nil {
-					return err
-				}
-				break
+				break parseShort
 			}
-		} else if flagDef.Type == FlagTypeBool {
+			// Value is rest of current argument
+			valueBytes := flagBytes[i+1:]
+			err := p.storeFlagValue(flagDef.Name, flagDef, valueBytes, flagDef.IsGlobal())
+			if err != nil {
+				return err
+			}
+			break parseShort
+		case flagDef.Type == FlagTypeBool:
 			// Boolean flag without value - defaults to true
 			err := p.storeFlagValue(flagDef.Name, flagDef, trueBoolBytes, flagDef.IsGlobal())
 			if err != nil {
 				return err
 			}
-		} else {
+		default:
 			// Non-boolean flag without value - this is an error
 			return &ParseError{
 				Type:    ErrorTypeMissingValue,
@@ -391,7 +390,6 @@ func findByte(b []byte, target byte) int {
 	}
 	return -1
 }
-
 
 // reset resets parser state for reuse without allocations
 func (p *Parser) reset() {
@@ -467,6 +465,8 @@ func (p *Parser) findCommand(name string) *Command {
 
 // storeFlag stores a parsed flag value in the appropriate result map.
 // Global flags are stored separately from command-specific flags.
+//
+//nolint:gocognit,funlen // Parsing and storing across types in one place for performance.
 func (p *Parser) storeFlagValue(name string, flag *Flag, valueBytes []byte, isGlobal bool) error {
 	result := p.currentResult
 	if result == nil {
@@ -507,7 +507,6 @@ func (p *Parser) storeFlagValue(name string, flag *Flag, valueBytes []byte, isGl
 		}
 
 	case FlagTypeDuration:
-		// TODO: Implement parseDurationBytes
 		value, err := p.parseDurationBytes(valueBytes)
 		if err != nil {
 			return &ParseError{
@@ -523,7 +522,6 @@ func (p *Parser) storeFlagValue(name string, flag *Flag, valueBytes []byte, isGl
 		}
 
 	case FlagTypeFloat:
-		// TODO: Implement parseFloatBytes
 		value, err := p.parseFloatBytes(valueBytes)
 		if err != nil {
 			return &ParseError{
@@ -556,14 +554,7 @@ func (p *Parser) storeFlagValue(name string, flag *Flag, valueBytes []byte, isGl
 
 	case FlagTypeStringSlice:
 		// Parse comma-separated strings using pooled slice
-		slice, err := p.parseStringSlice(valueBytes)
-		if err != nil {
-			return &ParseError{
-				Type:    ErrorTypeInvalidValue,
-				Message: "invalid string slice value",
-				Flag:    flag.Name,
-			}
-		}
+		slice := p.parseStringSlice(valueBytes)
 		// Store slice for cleanup and create offset
 		result.stringSlices = append(result.stringSlices, slice)
 		offset := pool.SliceOffset{Start: len(result.stringSlices) - 1, End: len(result.stringSlices)}
@@ -620,12 +611,12 @@ func (p *Parser) createUnknownFlagError(name string) error {
 		p.appendString("?")
 	}
 
-    // Reuse pre-allocated error to avoid allocations, but copy string to avoid aliasing
-    p.reusableError.Type = ErrorTypeUnknownFlag
-    p.reusableError.Message = string(append([]byte(nil), p.valueBuffer...))
-    p.reusableError.Flag = name
-    p.reusableError.Suggestion = suggestion
-    return p.reusableError
+	// Reuse pre-allocated error to avoid allocations, but copy string to avoid aliasing
+	p.reusableError.Type = ErrorTypeUnknownFlag
+	p.reusableError.Message = string(append([]byte(nil), p.valueBuffer...))
+	p.reusableError.Flag = name
+	p.reusableError.Suggestion = suggestion
+	return p.reusableError
 }
 
 // createUnknownCommandError creates an error with smart suggestions for unknown commands.
@@ -644,12 +635,12 @@ func (p *Parser) createUnknownCommandError(name string) error {
 		p.appendString("'?")
 	}
 
-    // Reuse pre-allocated error to avoid allocations, but copy string to avoid aliasing
-    p.reusableError.Type = ErrorTypeUnknownCommand
-    p.reusableError.Message = string(append([]byte(nil), p.valueBuffer...))
-    p.reusableError.Command = name
-    p.reusableError.Suggestion = suggestion
-    return p.reusableError
+	// Reuse pre-allocated error to avoid allocations, but copy string to avoid aliasing
+	p.reusableError.Type = ErrorTypeUnknownCommand
+	p.reusableError.Message = string(append([]byte(nil), p.valueBuffer...))
+	p.reusableError.Command = name
+	p.reusableError.Suggestion = suggestion
+	return p.reusableError
 }
 
 // getResult returns a ParseResult from the pre-allocated reusable result.
@@ -704,8 +695,10 @@ func (p *Parser) applyDefaults(result *ParseResult) {
 }
 
 // applyFlagDefault applies environment variable or default value for a regular flag if not already set
+//
+//nolint:dupl,gocognit,gocyclo,cyclop // Similar to applyGlobalDefault but for non-global flags
 func (p *Parser) applyFlagDefault(result *ParseResult, name string, flag *Flag) {
-    switch flag.Type {
+	switch flag.Type {
 	case FlagTypeString:
 		if _, exists := result.StringFlags[name]; !exists {
 			// Check environment variables first (precedence order)
@@ -730,9 +723,8 @@ func (p *Parser) applyFlagDefault(result *ParseResult, name string, flag *Flag) 
 		if _, exists := result.BoolFlags[name]; !exists {
 			// Check environment variables first (precedence order)
 			if envValue := p.getEnvValue(flag.EnvVars); envValue != "" {
-				if boolValue, err := p.parseBoolValue(envValue); err == nil {
-					result.BoolFlags[name] = boolValue
-				}
+				boolValue := p.parseBoolValue(envValue)
+				result.BoolFlags[name] = boolValue
 			} else {
 				result.BoolFlags[name] = flag.DefaultBool
 			}
@@ -759,58 +751,58 @@ func (p *Parser) applyFlagDefault(result *ParseResult, name string, flag *Flag) 
 				result.FloatFlags[name] = flag.DefaultFloat
 			}
 		}
-    case FlagTypeEnum:
-        if _, exists := result.EnumFlags[name]; !exists {
-            // Check environment variables first (precedence order)
-            if envValue := p.getEnvValue(flag.EnvVars); envValue != "" {
-                // Validate enum value
-                if p.isValidEnumValue(flag, envValue) {
-                    result.EnumFlags[name] = envValue
-                }
-            } else if flag.DefaultEnum != "" {
-                result.EnumFlags[name] = flag.DefaultEnum
-            }
-        }
-    case FlagTypeStringSlice:
-        if _, exists := result.StringSliceOffsets[name]; !exists {
-            if envValue := p.getEnvValue(flag.EnvVars); envValue != "" {
-                slice, err := p.parseStringSlice([]byte(envValue))
-                if err == nil {
-                    result.stringSlices = append(result.stringSlices, slice)
-                    offset := pool.SliceOffset{Start: len(result.stringSlices) - 1, End: len(result.stringSlices)}
-                    result.StringSliceOffsets[name] = offset
-                }
-            } else if len(flag.DefaultStringSlice) > 0 {
-                slice := pool.GetStringSlice()
-                *slice = append(*slice, flag.DefaultStringSlice...)
-                result.stringSlices = append(result.stringSlices, slice)
-                offset := pool.SliceOffset{Start: len(result.stringSlices) - 1, End: len(result.stringSlices)}
-                result.StringSliceOffsets[name] = offset
-            }
-        }
-    case FlagTypeIntSlice:
-        if _, exists := result.IntSliceOffsets[name]; !exists {
-            if envValue := p.getEnvValue(flag.EnvVars); envValue != "" {
-                slice, err := p.parseIntSlice([]byte(envValue))
-                if err == nil {
-                    result.intSlices = append(result.intSlices, slice)
-                    offset := pool.SliceOffset{Start: len(result.intSlices) - 1, End: len(result.intSlices)}
-                    result.IntSliceOffsets[name] = offset
-                }
-            } else if len(flag.DefaultIntSlice) > 0 {
-                slice := pool.GetIntSlice()
-                *slice = append(*slice, flag.DefaultIntSlice...)
-                result.intSlices = append(result.intSlices, slice)
-                offset := pool.SliceOffset{Start: len(result.intSlices) - 1, End: len(result.intSlices)}
-                result.IntSliceOffsets[name] = offset
-            }
-        }
-    }
+	case FlagTypeEnum:
+		if _, exists := result.EnumFlags[name]; !exists {
+			// Check environment variables first (precedence order)
+			if envValue := p.getEnvValue(flag.EnvVars); envValue != "" {
+				// Validate enum value
+				if p.isValidEnumValue(flag, envValue) {
+					result.EnumFlags[name] = envValue
+				}
+			} else if flag.DefaultEnum != "" {
+				result.EnumFlags[name] = flag.DefaultEnum
+			}
+		}
+	case FlagTypeStringSlice:
+		if _, exists := result.StringSliceOffsets[name]; !exists {
+			if envValue := p.getEnvValue(flag.EnvVars); envValue != "" {
+				slice := p.parseStringSlice([]byte(envValue))
+				result.stringSlices = append(result.stringSlices, slice)
+				offset := pool.SliceOffset{Start: len(result.stringSlices) - 1, End: len(result.stringSlices)}
+				result.StringSliceOffsets[name] = offset
+			} else if len(flag.DefaultStringSlice) > 0 {
+				slice := pool.GetStringSlice()
+				*slice = append(*slice, flag.DefaultStringSlice...)
+				result.stringSlices = append(result.stringSlices, slice)
+				offset := pool.SliceOffset{Start: len(result.stringSlices) - 1, End: len(result.stringSlices)}
+				result.StringSliceOffsets[name] = offset
+			}
+		}
+	case FlagTypeIntSlice:
+		if _, exists := result.IntSliceOffsets[name]; !exists {
+			if envValue := p.getEnvValue(flag.EnvVars); envValue != "" {
+				slice, err := p.parseIntSlice([]byte(envValue))
+				if err == nil {
+					result.intSlices = append(result.intSlices, slice)
+					offset := pool.SliceOffset{Start: len(result.intSlices) - 1, End: len(result.intSlices)}
+					result.IntSliceOffsets[name] = offset
+				}
+			} else if len(flag.DefaultIntSlice) > 0 {
+				slice := pool.GetIntSlice()
+				*slice = append(*slice, flag.DefaultIntSlice...)
+				result.intSlices = append(result.intSlices, slice)
+				offset := pool.SliceOffset{Start: len(result.intSlices) - 1, End: len(result.intSlices)}
+				result.IntSliceOffsets[name] = offset
+			}
+		}
+	}
 }
 
 // applyGlobalDefault applies environment variable or default value for a global flag if not already set
+//
+//nolint:dupl,gocognit,gocyclo,cyclop // Similar to applyFlagDefault but for global flags
 func (p *Parser) applyGlobalDefault(result *ParseResult, name string, flag *Flag) {
-    switch flag.Type {
+	switch flag.Type {
 	case FlagTypeString:
 		if _, exists := result.GlobalStringFlags[name]; !exists {
 			// Check environment variables first (precedence order)
@@ -835,9 +827,8 @@ func (p *Parser) applyGlobalDefault(result *ParseResult, name string, flag *Flag
 		if _, exists := result.GlobalBoolFlags[name]; !exists {
 			// Check environment variables first (precedence order)
 			if envValue := p.getEnvValue(flag.EnvVars); envValue != "" {
-				if boolValue, err := p.parseBoolValue(envValue); err == nil {
-					result.GlobalBoolFlags[name] = boolValue
-				}
+				boolValue := p.parseBoolValue(envValue)
+				result.GlobalBoolFlags[name] = boolValue
 			} else {
 				result.GlobalBoolFlags[name] = flag.DefaultBool
 			}
@@ -864,53 +855,51 @@ func (p *Parser) applyGlobalDefault(result *ParseResult, name string, flag *Flag
 				result.GlobalFloatFlags[name] = flag.DefaultFloat
 			}
 		}
-    case FlagTypeEnum:
-        if _, exists := result.GlobalEnumFlags[name]; !exists {
-            // Check environment variables first (precedence order)
-            if envValue := p.getEnvValue(flag.EnvVars); envValue != "" {
-                // Validate enum value
-                if p.isValidEnumValue(flag, envValue) {
-                    result.GlobalEnumFlags[name] = envValue
-                }
-            } else if flag.DefaultEnum != "" {
-                result.GlobalEnumFlags[name] = flag.DefaultEnum
-            }
-        }
-    case FlagTypeStringSlice:
-        if _, exists := result.GlobalStringSliceOffsets[name]; !exists {
-            if envValue := p.getEnvValue(flag.EnvVars); envValue != "" {
-                slice, err := p.parseStringSlice([]byte(envValue))
-                if err == nil {
-                    result.stringSlices = append(result.stringSlices, slice)
-                    offset := pool.SliceOffset{Start: len(result.stringSlices) - 1, End: len(result.stringSlices)}
-                    result.GlobalStringSliceOffsets[name] = offset
-                }
-            } else if len(flag.DefaultStringSlice) > 0 {
-                slice := pool.GetStringSlice()
-                *slice = append(*slice, flag.DefaultStringSlice...)
-                result.stringSlices = append(result.stringSlices, slice)
-                offset := pool.SliceOffset{Start: len(result.stringSlices) - 1, End: len(result.stringSlices)}
-                result.GlobalStringSliceOffsets[name] = offset
-            }
-        }
-    case FlagTypeIntSlice:
-        if _, exists := result.GlobalIntSliceOffsets[name]; !exists {
-            if envValue := p.getEnvValue(flag.EnvVars); envValue != "" {
-                slice, err := p.parseIntSlice([]byte(envValue))
-                if err == nil {
-                    result.intSlices = append(result.intSlices, slice)
-                    offset := pool.SliceOffset{Start: len(result.intSlices) - 1, End: len(result.intSlices)}
-                    result.GlobalIntSliceOffsets[name] = offset
-                }
-            } else if len(flag.DefaultIntSlice) > 0 {
-                slice := pool.GetIntSlice()
-                *slice = append(*slice, flag.DefaultIntSlice...)
-                result.intSlices = append(result.intSlices, slice)
-                offset := pool.SliceOffset{Start: len(result.intSlices) - 1, End: len(result.intSlices)}
-                result.GlobalIntSliceOffsets[name] = offset
-            }
-        }
-    }
+	case FlagTypeEnum:
+		if _, exists := result.GlobalEnumFlags[name]; !exists {
+			// Check environment variables first (precedence order)
+			if envValue := p.getEnvValue(flag.EnvVars); envValue != "" {
+				// Validate enum value
+				if p.isValidEnumValue(flag, envValue) {
+					result.GlobalEnumFlags[name] = envValue
+				}
+			} else if flag.DefaultEnum != "" {
+				result.GlobalEnumFlags[name] = flag.DefaultEnum
+			}
+		}
+	case FlagTypeStringSlice:
+		if _, exists := result.GlobalStringSliceOffsets[name]; !exists {
+			if envValue := p.getEnvValue(flag.EnvVars); envValue != "" {
+				slice := p.parseStringSlice([]byte(envValue))
+				result.stringSlices = append(result.stringSlices, slice)
+				offset := pool.SliceOffset{Start: len(result.stringSlices) - 1, End: len(result.stringSlices)}
+				result.GlobalStringSliceOffsets[name] = offset
+			} else if len(flag.DefaultStringSlice) > 0 {
+				slice := pool.GetStringSlice()
+				*slice = append(*slice, flag.DefaultStringSlice...)
+				result.stringSlices = append(result.stringSlices, slice)
+				offset := pool.SliceOffset{Start: len(result.stringSlices) - 1, End: len(result.stringSlices)}
+				result.GlobalStringSliceOffsets[name] = offset
+			}
+		}
+	case FlagTypeIntSlice:
+		if _, exists := result.GlobalIntSliceOffsets[name]; !exists {
+			if envValue := p.getEnvValue(flag.EnvVars); envValue != "" {
+				slice, err := p.parseIntSlice([]byte(envValue))
+				if err == nil {
+					result.intSlices = append(result.intSlices, slice)
+					offset := pool.SliceOffset{Start: len(result.intSlices) - 1, End: len(result.intSlices)}
+					result.GlobalIntSliceOffsets[name] = offset
+				}
+			} else if len(flag.DefaultIntSlice) > 0 {
+				slice := pool.GetIntSlice()
+				*slice = append(*slice, flag.DefaultIntSlice...)
+				result.intSlices = append(result.intSlices, slice)
+				offset := pool.SliceOffset{Start: len(result.intSlices) - 1, End: len(result.intSlices)}
+				result.GlobalIntSliceOffsets[name] = offset
+			}
+		}
+	}
 }
 
 // Utility methods for zero-allocation operations
@@ -974,13 +963,14 @@ func (p *Parser) parseIntBytes(b []byte) (int, error) {
 	start := 0
 
 	// Handle sign
-	if b[0] == '-' {
+	switch b[0] {
+	case '-':
 		negative = true
 		start = 1
 		if len(b) == 1 {
 			return 0, &ParseError{Type: ErrorTypeInvalidValue, Message: "invalid integer"}
 		}
-	} else if b[0] == '+' {
+	case '+':
 		start = 1
 		if len(b) == 1 {
 			return 0, &ParseError{Type: ErrorTypeInvalidValue, Message: "invalid integer"}
@@ -1028,10 +1018,10 @@ func (p *Parser) parseDecimalBytes(b []byte) (int, error) {
 		// ASCII math: '8' - '0' = 8
 		digit := int(c - '0')
 
-        // Check for overflow before multiplication (platform-agnostic)
-        if result > (math.MaxInt-digit)/10 {
-            return 0, &ParseError{Type: ErrorTypeInvalidValue, Message: "integer overflow"}
-        }
+		// Check for overflow before multiplication (platform-agnostic)
+		if result > (math.MaxInt-digit)/10 {
+			return 0, &ParseError{Type: ErrorTypeInvalidValue, Message: "integer overflow"}
+		}
 
 		// Build number: "123" -> 1*10 + 2 -> 12*10 + 3 = 123
 		result = result*10 + digit
@@ -1064,10 +1054,10 @@ func (p *Parser) parseHexBytes(b []byte) (int, error) {
 			return 0, &ParseError{Type: ErrorTypeInvalidValue, Message: "invalid hex character"}
 		}
 
-        // Check for overflow (hex can get large quickly)
-        if result > (math.MaxInt-digit)/16 {
-            return 0, &ParseError{Type: ErrorTypeInvalidValue, Message: "hex integer overflow"}
-        }
+		// Check for overflow (hex can get large quickly)
+		if result > (math.MaxInt-digit)/16 {
+			return 0, &ParseError{Type: ErrorTypeInvalidValue, Message: "hex integer overflow"}
+		}
 
 		// Build hex number: "A1" -> 10*16 + 1 = 161
 		result = result*16 + digit
@@ -1100,7 +1090,6 @@ func (p *Parser) parseDurationBytes(b []byte) (time.Duration, error) {
 // parseFloatBytes parses float64 from bytes using zero allocations
 func (p *Parser) parseFloatBytes(b []byte) (float64, error) {
 	// Simple implementation for common cases like "3.14"
-	// TODO: Implement full zero-allocation float parsing
 	result := 0.0
 	decimal := 0.0
 	decimalPlace := 1.0
@@ -1158,7 +1147,8 @@ func countByte(b []byte, target byte) int {
 
 // parseColonDuration parses "MM:SS" or "HH:MM:SS" format
 func (p *Parser) parseColonDuration(b []byte, colonCount int) (time.Duration, error) {
-	if colonCount == 1 {
+	switch colonCount {
+	case 1:
 		// Format: "MM:SS" - minutes:seconds
 		colonPos := findByte(b, ':')
 		if colonPos == -1 {
@@ -1176,8 +1166,7 @@ func (p *Parser) parseColonDuration(b []byte, colonCount int) (time.Duration, er
 		}
 
 		return time.Duration(minutes)*time.Minute + time.Duration(seconds)*time.Second, nil
-
-	} else if colonCount == 2 {
+	case 2:
 		// Format: "HH:MM:SS" - hours:minutes:seconds
 		firstColon := findByte(b, ':')
 		if firstColon == -1 {
@@ -1205,7 +1194,13 @@ func (p *Parser) parseColonDuration(b []byte, colonCount int) (time.Duration, er
 			return 0, &ParseError{Type: ErrorTypeInvalidValue, Message: "invalid seconds"}
 		}
 
-		return time.Duration(hours)*time.Hour + time.Duration(minutes)*time.Minute + time.Duration(seconds)*time.Second, nil
+		return time.Duration(
+			hours,
+		)*time.Hour + time.Duration(
+			minutes,
+		)*time.Minute + time.Duration(
+			seconds,
+		)*time.Second, nil
 	}
 
 	return 0, &ParseError{Type: ErrorTypeInvalidValue, Message: "too many colons"}
@@ -1221,7 +1216,7 @@ func (p *Parser) parseExtendedDuration(b []byte) (time.Duration, bool) {
 	lastChar := b[len(b)-1]
 	unit := lastChar
 	if unit >= 'A' && unit <= 'Z' {
-		unit = unit + 32 // Convert to lowercase
+		unit += 32 // Convert to lowercase
 	}
 
 	var multiplier time.Duration
@@ -1302,6 +1297,8 @@ func (p *Parser) parseStandardDuration(b []byte) (time.Duration, error) {
 }
 
 // parseTimeUnit parses time unit from bytes and returns the duration and bytes consumed
+//
+//nolint:gocognit,gocyclo,cyclop // Compact table-driven-ish branching for unit parsing.
 func (p *Parser) parseTimeUnit(b []byte) (time.Duration, int) {
 	if len(b) == 0 {
 		return 0, 0
@@ -1310,7 +1307,7 @@ func (p *Parser) parseTimeUnit(b []byte) (time.Duration, int) {
 	// Convert first char to lowercase for comparison
 	firstChar := b[0]
 	if firstChar >= 'A' && firstChar <= 'Z' {
-		firstChar = firstChar + 32
+		firstChar += 32
 	}
 
 	switch firstChar {
@@ -1375,7 +1372,7 @@ func matchesWord(b []byte, word string) bool {
 	for i := 0; i < len(word); i++ {
 		char := b[i]
 		if char >= 'A' && char <= 'Z' {
-			char = char + 32
+			char += 32
 		}
 		if char != word[i] {
 			return false
@@ -1402,11 +1399,12 @@ func trimSpaceBytes(b []byte) []byte {
 }
 
 // parseStringSlice parses comma-separated strings using pooled slice
-func (p *Parser) parseStringSlice(b []byte) (*[]string, error) {
+// Note: No error conditions for strings; signature returns only the slice.
+func (p *Parser) parseStringSlice(b []byte) *[]string {
 	slice := pool.GetStringSlice()
 
 	if len(b) == 0 {
-		return slice, nil
+		return slice
 	}
 
 	start := 0
@@ -1426,7 +1424,7 @@ func (p *Parser) parseStringSlice(b []byte) (*[]string, error) {
 		}
 	}
 
-	return slice, nil
+	return slice
 }
 
 // parseIntSlice parses comma-separated integers using pooled slice
@@ -1509,30 +1507,30 @@ func (p *Parser) findClosestFlag(name string) string {
 
 // findClosestCommand finds the closest matching command name using Levenshtein distance.
 func (p *Parser) findClosestCommand(name string) string {
-    if p.app == nil {
-        return ""
-    }
+	if p.app == nil {
+		return ""
+	}
 
-    bestMatch := ""
-    bestDistance := 3 // Only suggest if distance <= 2
-    // Prefer subcommands of the current command
-    if p.currentCmd != nil && p.currentCmd.subcommands != nil {
-        for cmdName := range p.currentCmd.subcommands {
-            distance := p.levenshteinDistance(name, cmdName)
-            if distance < bestDistance {
-                bestDistance = distance
-                bestMatch = cmdName
-            }
-        }
-    }
-    // Fall back to top-level commands
-    for cmdName := range p.app.commands {
-        distance := p.levenshteinDistance(name, cmdName)
-        if distance < bestDistance {
-            bestDistance = distance
-            bestMatch = cmdName
-        }
-    }
+	bestMatch := ""
+	bestDistance := 3 // Only suggest if distance <= 2
+	// Prefer subcommands of the current command
+	if p.currentCmd != nil && p.currentCmd.subcommands != nil {
+		for cmdName := range p.currentCmd.subcommands {
+			distance := p.levenshteinDistance(name, cmdName)
+			if distance < bestDistance {
+				bestDistance = distance
+				bestMatch = cmdName
+			}
+		}
+	}
+	// Fall back to top-level commands
+	for cmdName := range p.app.commands {
+		distance := p.levenshteinDistance(name, cmdName)
+		if distance < bestDistance {
+			bestDistance = distance
+			bestMatch = cmdName
+		}
+	}
 
 	return bestMatch
 }
@@ -1586,8 +1584,8 @@ func (p *Parser) levenshteinDistance(a, b string) int {
 	return row[len(a)]
 }
 
-// min returns the minimum of two integers.
-func min(a, b int) int {
+// intMin returns the minimum of two integers.
+func intMin(a, b int) int {
 	if a < b {
 		return a
 	}
@@ -1596,7 +1594,7 @@ func min(a, b int) int {
 
 // min3 returns the minimum of three integers.
 func min3(a, b, c int) int {
-	return min(min(a, b), c)
+	return intMin(intMin(a, b), c)
 }
 
 // String builder methods for zero-allocation error message construction
@@ -1993,70 +1991,74 @@ func (p *Parser) validateFlagGroups(result *ParseResult) error {
 
 // validateSingleGroup validates a single flag group constraint
 func (p *Parser) validateSingleGroup(group *FlagGroup, result *ParseResult) error {
-    // First pass: count how many flags in the group are set without allocating
-    setCount := 0
-    for _, flag := range group.Flags {
-        if p.isFlagSet(flag, result) {
-            setCount++
-        }
-    }
+	// First pass: count how many flags in the group are set without allocating
+	setCount := 0
+	for _, flag := range group.Flags {
+		if p.isFlagSet(flag, result) {
+			setCount++
+		}
+	}
 
-    // Validate based on constraint type
-    switch group.Constraint {
-    case GroupMutuallyExclusive:
-        if setCount > 1 {
-            // Slow path (error): collect names only when needed
-            setFlags := make([]string, 0, setCount)
-            for _, flag := range group.Flags {
-                if p.isFlagSet(flag, result) {
-                    setFlags = append(setFlags, flag.Name)
-                }
-            }
-            err := NewParseError(
-                ErrorTypeFlagGroupViolation,
-                fmt.Sprintf("flags in group '%s' are mutually exclusive, but multiple were provided: %v",
-                    group.Name, setFlags),
-            )
-            err.GroupName = group.Name
-            return err
-        }
+	// Validate based on constraint type
+	switch group.Constraint { // exhaustive over GroupConstraintType
+	case GroupMutuallyExclusive:
+		if setCount > 1 {
+			// Slow path (error): collect names only when needed
+			setFlags := make([]string, 0, setCount)
+			for _, flag := range group.Flags {
+				if p.isFlagSet(flag, result) {
+					setFlags = append(setFlags, flag.Name)
+				}
+			}
+			err := NewParseError(
+				ErrorTypeFlagGroupViolation,
+				fmt.Sprintf("flags in group '%s' are mutually exclusive, but multiple were provided: %v",
+					group.Name, setFlags),
+			)
+			err.GroupName = group.Name
+			return err
+		}
 
-    case GroupRequiredGroup, GroupAtLeastOne:
-        if setCount == 0 {
-            err := NewParseError(
-                ErrorTypeFlagGroupViolation,
-                fmt.Sprintf("group '%s' requires at least one flag to be set", group.Name),
-            )
-            err.GroupName = group.Name
-            return err
-        }
+	case GroupRequiredGroup, GroupAtLeastOne:
+		if setCount == 0 {
+			err := NewParseError(
+				ErrorTypeFlagGroupViolation,
+				fmt.Sprintf("group '%s' requires at least one flag to be set", group.Name),
+			)
+			err.GroupName = group.Name
+			return err
+		}
 
-    case GroupAllOrNone:
-        if setCount > 0 && setCount < len(group.Flags) {
-            err := NewParseError(
-                ErrorTypeFlagGroupViolation,
-                fmt.Sprintf("group '%s' requires either all flags or no flags to be set", group.Name),
-            )
-            err.GroupName = group.Name
-            return err
-        }
+	case GroupAllOrNone:
+		if setCount > 0 && setCount < len(group.Flags) {
+			err := NewParseError(
+				ErrorTypeFlagGroupViolation,
+				fmt.Sprintf("group '%s' requires either all flags or no flags to be set", group.Name),
+			)
+			err.GroupName = group.Name
+			return err
+		}
 
-    case GroupExactlyOne:
-        if setCount != 1 {
-            err := NewParseError(
-                ErrorTypeFlagGroupViolation,
-                fmt.Sprintf("group '%s' requires exactly one flag to be set, but %d were provided",
-                    group.Name, setCount),
-            )
-            err.GroupName = group.Name
-            return err
-        }
-    }
+	case GroupExactlyOne:
+		if setCount != 1 {
+			err := NewParseError(
+				ErrorTypeFlagGroupViolation,
+				fmt.Sprintf("group '%s' requires exactly one flag to be set, but %d were provided",
+					group.Name, setCount),
+			)
+			err.GroupName = group.Name
+			return err
+		}
+	case GroupNoConstraint:
+		// No validation needed
+	}
 
-    return nil
+	return nil
 }
 
 // isFlagSet checks if a flag is set in the parse result
+//
+//nolint:funlen // Compact switch over flag types
 func (p *Parser) isFlagSet(flag *Flag, result *ParseResult) bool {
 	switch flag.Type {
 	case FlagTypeString:
@@ -2143,9 +2145,9 @@ func (p *Parser) parseIntValue(value string) (int, error) {
 	return p.parseIntBytes([]byte(value))
 }
 
-// parseBoolValue parses a string value as a boolean
-func (p *Parser) parseBoolValue(value string) (bool, error) {
-	return p.parseBoolBytes([]byte(value)), nil
+// parseBoolValue parses a string value as a boolean without error.
+func (p *Parser) parseBoolValue(value string) bool {
+	return p.parseBoolBytes([]byte(value))
 }
 
 // parseFloatValue parses a string value as a float64
@@ -2155,6 +2157,6 @@ func (p *Parser) parseFloatValue(value string) (float64, error) {
 
 // parseDurationValue parses a string value as a time.Duration
 func (p *Parser) parseDurationValue(value string) (time.Duration, error) {
-    // Support the same extended formats as CLI parsing
-    return p.parseDurationBytes([]byte(value))
+	// Support the same extended formats as CLI parsing
+	return p.parseDurationBytes([]byte(value))
 }

@@ -17,11 +17,11 @@ import (
 type ServerConfig struct {
 	// Basic server settings
 	Host string `flag:"host" env:"HOST" description:"Server hostname" default:"localhost"`
-	Port int    `flag:"port" env:"PORT" description:"Server port" default:"8080"`
+	Port int    `flag:"port" env:"PORT" description:"Server port"     default:"8080"`
 
 	// Feature flags and timeouts
-	Debug   bool          `flag:"debug" env:"DEBUG" description:"Enable debug logging"`
-	Timeout time.Duration `flag:"timeout" env:"TIMEOUT" description:"Request timeout" default:"30s"`
+	Debug   bool          `flag:"debug"   env:"DEBUG"   description:"Enable debug logging"`
+	Timeout time.Duration `flag:"timeout" env:"TIMEOUT" description:"Request timeout"          default:"30s"`
 	Workers int           `flag:"workers" env:"WORKERS" description:"Number of worker threads" default:"4"`
 
 	// Configuration with enum validation
@@ -71,8 +71,8 @@ func main() {
 			"workers": 8,         // More workers for production
 		}).
 		FromEnv().               // Load from environment variables
-        FromFlags().             // Generate CLI flags and load from command line
-        FromFile("config.json"). // Load from JSON config file if provided
+		FromFlags().             // Generate CLI flags and load from command line
+		FromFile("config.json"). // Load from JSON config file if provided
 		Bind(&config).           // Bind to struct
 		Build()                  // Build returns App when FromFlags() is used
 
@@ -126,7 +126,8 @@ func startServer(config ServerConfig) {
 	})
 
 	mux.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
-		response := fmt.Sprintf(`{
+		response := fmt.Sprintf(
+			`{
 	"database": {
 		"url": "%s",
 		"max_connections": %d,
@@ -147,9 +148,20 @@ func startServer(config ServerConfig) {
 		"port": %d,
 		"path": "%s"
 	}
-}`, config.Database.URL, config.Database.MaxConns, config.Database.EnableSSL, config.Database.Timeout,
-			config.Cache.Type, config.Cache.TTL, config.Cache.Redis.Host, config.Cache.Redis.Port, config.Cache.Redis.Database,
-			config.Metrics.Enabled, config.Metrics.Port, config.Metrics.Path)
+}`,
+			config.Database.URL,
+			config.Database.MaxConns,
+			config.Database.EnableSSL,
+			config.Database.Timeout,
+			config.Cache.Type,
+			config.Cache.TTL,
+			config.Cache.Redis.Host,
+			config.Cache.Redis.Port,
+			config.Cache.Redis.Database,
+			config.Metrics.Enabled,
+			config.Metrics.Port,
+			config.Metrics.Path,
+		)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)

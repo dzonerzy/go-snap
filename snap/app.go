@@ -1,20 +1,22 @@
 package snap
 
 import (
-    "context"
-    "fmt"
-    "os"
-    "runtime"
-    "time"
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"runtime"
+	"strconv"
+	"time"
 
-    "github.com/dzonerzy/go-snap/middleware"
-    snapio "github.com/dzonerzy/go-snap/io"
+	snapio "github.com/dzonerzy/go-snap/io"
+	"github.com/dzonerzy/go-snap/middleware"
 )
 
 // Special error types for graceful exits
 var (
-	ErrHelpShown    = fmt.Errorf("help shown")
-	ErrVersionShown = fmt.Errorf("version shown")
+	ErrHelpShown    = errors.New("help shown")
+	ErrVersionShown = errors.New("version shown")
 )
 
 // ActionFunc defines the command execution function
@@ -51,41 +53,41 @@ type App struct {
 	// Error handling
 	errorHandler *ErrorHandler
 
-    // Middleware
-    middleware []middleware.Middleware
+	// Middleware
+	middleware []middleware.Middleware
 
-    // Current parse result for flag access (available after parsing)
-    currentResult *ParseResult
+	// Current parse result for flag access (available after parsing)
+	currentResult *ParseResult
 
-    // Configuration builder for automatic config population during Run()
-    configBuilder *ConfigBuilder
+	// Configuration builder for automatic config population during Run()
+	configBuilder *ConfigBuilder
 
-    // IO management
-    ioManager *snapio.IOManager
+	// IO management
+	ioManager *snapio.IOManager
 
-    // Exit code management
-    exitCodes *ExitCodeManager
+	// Exit code management
+	exitCodes *ExitCodeManager
 
-    // Wrapper at app level (optional)
-    defaultWrapper *WrapperSpec
+	// Wrapper at app level (optional)
+	defaultWrapper *WrapperSpec
 }
 
 // New creates a new CLI application with fluent API
 func New(name, description string) *App {
-    return &App{
-        name:         name,
-        description:  description,
-        authors:      make([]Author, 0),
-        flags:        make(map[string]*Flag),
-        shortFlags:   make(map[rune]*Flag),
-        commands:     make(map[string]*Command),
-        flagGroups:   make([]*FlagGroup, 0),
-        helpFlag:     true,              // Enable help by default
-        versionFlag:  false,             // Disable version by default
-        errorHandler: NewErrorHandler(), // Initialize with default error handler
-        middleware:   make([]middleware.Middleware, 0),
-        ioManager:    snapio.New(),
-    }
+	return &App{
+		name:         name,
+		description:  description,
+		authors:      make([]Author, 0),
+		flags:        make(map[string]*Flag),
+		shortFlags:   make(map[rune]*Flag),
+		commands:     make(map[string]*Command),
+		flagGroups:   make([]*FlagGroup, 0),
+		helpFlag:     true,              // Enable help by default
+		versionFlag:  false,             // Disable version by default
+		errorHandler: NewErrorHandler(), // Initialize with default error handler
+		middleware:   make([]middleware.Middleware, 0),
+		ioManager:    snapio.New(),
+	}
 }
 
 // App configuration methods
@@ -135,14 +137,16 @@ func (a *App) Before(fn ActionFunc) *App {
 
 // After sets a function to run after any command action
 func (a *App) After(fn ActionFunc) *App {
-    a.afterAction = fn
-    return a
+	a.afterAction = fn
+	return a
 }
 
 // IO returns the application's IOManager for fluent configuration.
 func (a *App) IO() *snapio.IOManager {
-    if a.ioManager == nil { a.ioManager = snapio.New() }
-    return a.ioManager
+	if a.ioManager == nil {
+		a.ioManager = snapio.New()
+	}
+	return a.ioManager
 }
 
 // Flag builders - Type-safe flag definitions
@@ -273,10 +277,10 @@ func (a *App) RunContext(ctx context.Context) error {
 
 // RunWithArgs runs the application with provided arguments
 func (a *App) RunWithArgs(ctx context.Context, args []string) error {
-    // Windows: auto-enable Virtual Terminal (ANSI) when writing to a TTY, unless disabled
-    if runtime.GOOS == "windows" && a.IO().IsTTY() && os.Getenv("SNAP_DISABLE_VT") == "" {
-        _ = a.IO().EnableVirtualTerminal() // best-effort; ignore failure
-    }
+	// Windows: auto-enable Virtual Terminal (ANSI) when writing to a TTY, unless disabled
+	if runtime.GOOS == "windows" && a.IO().IsTTY() && os.Getenv("SNAP_DISABLE_VT") == "" {
+		_ = a.IO().EnableVirtualTerminal() // best-effort; ignore failure
+	}
 	// Add default help and version flags if enabled
 	if a.helpFlag {
 		a.addHelpFlag()
@@ -290,7 +294,8 @@ func (a *App) RunWithArgs(ctx context.Context, args []string) error {
 	result, err := parser.Parse(args)
 	if err != nil {
 		// Handle parsing errors with smart suggestions and contextual help
-		if parseErr, ok := err.(*ParseError); ok {
+		parseErr := &ParseError{}
+		if errors.As(err, &parseErr) {
 			return a.handleParseError(parseErr)
 		}
 		return err
@@ -300,15 +305,15 @@ func (a *App) RunWithArgs(ctx context.Context, args []string) error {
 	a.currentResult = result
 
 	// Handle built-in flags BEFORE populating configuration
-	if err := a.handleHelpAndVersion(result); err != nil {
-		return err
+	if helpErr := a.handleHelpAndVersion(result); helpErr != nil {
+		return helpErr
 	}
 
 	// Populate configuration if config builder is attached
 	if a.configBuilder != nil {
-		err := a.populateConfiguration()
-		if err != nil {
-			return fmt.Errorf("configuration error: %v", err)
+		cfgErr := a.populateConfiguration()
+		if cfgErr != nil {
+			return fmt.Errorf("configuration error: %w", cfgErr)
 		}
 	}
 
@@ -324,72 +329,78 @@ func (a *App) RunWithArgs(ctx context.Context, args []string) error {
 
 	// Execute before action
 	if a.beforeAction != nil {
-		if err := a.beforeAction(execCtx); err != nil {
-			return err
+		if beforeErr := a.beforeAction(execCtx); beforeErr != nil {
+			return beforeErr
 		}
 	}
 
-    // Execute command action
-    var actionErr error
-    if result.Command != nil {
-        // Check for command-specific help flag
-        if result.MustGetBool("help", false) {
-            actionErr = a.showCommandHelp(result.Command)
-        } else if result.Command.Action != nil {
-            // Apply middleware and execute action
-            wrappedAction := a.wrapActionWithMiddleware(result.Command.Action, result.Command)
-            actionErr = wrappedAction(execCtx)
-        } else if result.Command.wrapper != nil {
-            // Command-level wrapper (no explicit action)
-            actionErr = result.Command.wrapper.run(execCtx, args)
-        }
-    } else {
-        // No command specified, check if app has a default wrapper
-        if a.defaultWrapper != nil {
-            actionErr = a.defaultWrapper.run(execCtx, args)
-        } else {
-            // Default to help
-            actionErr = a.showHelp()
-        }
-    }
+	// Execute command action
+	var actionErr error
+	if result.Command != nil {
+		// Check command context: help vs action vs wrapper
+		switch {
+		case result.MustGetBool("help", false):
+			actionErr = a.showCommandHelp(result.Command)
+		case result.Command.Action != nil:
+			// Apply middleware and execute action
+			wrappedAction := a.wrapActionWithMiddleware(result.Command.Action, result.Command)
+			actionErr = wrappedAction(execCtx)
+		case result.Command.wrapper != nil:
+			// Command-level wrapper (no explicit action)
+			actionErr = result.Command.wrapper.run(execCtx, args)
+		default:
+			// No explicit action or wrapper: show the command help (especially when it has subcommands)
+			actionErr = a.showCommandHelp(result.Command)
+		}
+	} else {
+		// No command specified, check if app has a default wrapper
+		if a.defaultWrapper != nil {
+			actionErr = a.defaultWrapper.run(execCtx, args)
+		} else {
+			// Default to help
+			actionErr = a.showHelp()
+		}
+	}
 
-    // If the action requested exit via context, prefer that
-    if ee, ok := execCtx.Get("__exit_error__").(*ExitError); ok && ee != nil {
-        actionErr = ee
-    }
+	// If the action requested exit via context, prefer that
+	if ee, ok := execCtx.Get("__exit_error__").(*ExitError); ok && ee != nil {
+		actionErr = ee
+	}
 
-    // Execute after action
-    if a.afterAction != nil {
-        if err := a.afterAction(execCtx); err != nil {
-            return err
-        }
-    }
+	// Execute after action
+	if a.afterAction != nil {
+		if afterErr := a.afterAction(execCtx); afterErr != nil {
+			return afterErr
+		}
+	}
 
-    return actionErr
+	return actionErr
 }
 
 // ExitCodes returns the exit-code manager for this app. Use it to override
 // defaults or register custom mappings. Resolution precedence is:
 // ExitError > CLI category (DefineCLI) > concrete error type (DefineError) > defaults.
 func (a *App) ExitCodes() *ExitCodeManager {
-    if a.exitCodes == nil {
-        a.exitCodes = newExitCodeManager()
-    }
-    return a.exitCodes
+	if a.exitCodes == nil {
+		a.exitCodes = newExitCodeManager()
+	}
+	return a.exitCodes
 }
 
 // RunAndGetExitCode executes the app and returns the mapped exit code according
 // to ExitCodes(). Useful for embedding in your own main() without os.Exit.
 func (a *App) RunAndGetExitCode() int {
-    err := a.Run()
-    if err == nil { return a.ExitCodes().defaults.Success }
-    return a.ExitCodes().resolve(err)
+	err := a.Run()
+	if err == nil {
+		return a.ExitCodes().defaults.Success
+	}
+	return a.ExitCodes().resolve(err)
 }
 
 // RunAndExit executes the app and terminates the process with the mapped exit
 // code. Equivalent to os.Exit(a.RunAndGetExitCode()).
 func (a *App) RunAndExit() {
-    os.Exit(a.RunAndGetExitCode())
+	os.Exit(a.RunAndGetExitCode())
 }
 
 // FlagParent interface implementation
@@ -436,7 +447,6 @@ func (a *App) ErrorHandler() *ErrorHandler {
 	return a.errorHandler
 }
 
-
 // wrapActionWithMiddleware wraps the action with app-level and command-level middleware
 func (a *App) wrapActionWithMiddleware(action ActionFunc, cmd *Command) ActionFunc {
 	// Combine app-level and command-level middleware
@@ -454,7 +464,10 @@ func (a *App) wrapActionWithMiddleware(action ActionFunc, cmd *Command) ActionFu
 	// Convert snap.ActionFunc to middleware.ActionFunc using an adapter
 	middlewareAction := func(ctx middleware.Context) error {
 		// The context passed to middleware is a snap.Context that implements middleware.Context
-		snapCtx := ctx.(*Context)
+		snapCtx, ok := ctx.(*Context)
+		if !ok {
+			return NewError(ErrorTypeInternal, "invalid middleware context type")
+		}
 		return action(snapCtx)
 	}
 
@@ -473,19 +486,22 @@ func (a *App) handleParseError(parseErr *ParseError) error {
 	cliErr := NewError(parseErr.Type, parseErr.Message)
 
 	// Add context based on error type
-	switch parseErr.Type {
+	switch parseErr.Type { // exhaustive over ErrorType for context enrichment
 	case ErrorTypeUnknownFlag:
 		if parseErr.Flag != "" {
-			cliErr.WithContext("flag", parseErr.Flag)
+			cliErr = cliErr.WithContext("flag", parseErr.Flag)
 		}
 	case ErrorTypeUnknownCommand:
 		if parseErr.Command != "" {
-			cliErr.WithContext("command", parseErr.Command)
+			cliErr = cliErr.WithContext("command", parseErr.Command)
 		}
 	case ErrorTypeFlagGroupViolation:
 		if parseErr.GroupName != "" {
-			cliErr.WithContext("group", parseErr.GroupName)
+			cliErr = cliErr.WithContext("group", parseErr.GroupName)
 		}
+	case ErrorTypeInvalidFlag, ErrorTypeInvalidValue, ErrorTypeMissingValue,
+		ErrorTypeInternal, ErrorTypeMissingRequired, ErrorTypePermission, ErrorTypeValidation:
+		// No additional context for these types here.
 	}
 
 	// Process error with smart suggestions
@@ -509,6 +525,11 @@ func (a *App) addHelpFlag() {
 			Global:      true,
 		}
 		a.flags["help"] = flag
+		// Provide -h by default if not already in use
+		if _, taken := a.shortFlags['h']; !taken {
+			flag.Short = 'h'
+			a.shortFlags['h'] = flag
+		}
 	}
 }
 
@@ -535,10 +556,17 @@ func (a *App) addCommandHelpFlag(cmd *Command) {
 			Global:      false,
 		}
 		cmd.flags["help"] = flag
+		// Provide -h by default at command level if not already in use
+		if _, taken := cmd.shortFlags['h']; !taken {
+			flag.Short = 'h'
+			cmd.shortFlags['h'] = flag
+		}
 	}
 }
 
 // showHelp displays comprehensive application help
+//
+//nolint:gocognit // Help rendering involves many small branches; splitting would harm readability.
 func (a *App) showHelp() error {
 	// Application name and description
 	if a.description != "" {
@@ -558,6 +586,7 @@ func (a *App) showHelp() error {
 	if len(a.flags) > 0 {
 		print(" [GLOBAL FLAGS]")
 	}
+
 	if len(a.commands) > 0 {
 		print(" COMMAND [COMMAND FLAGS]")
 	}
@@ -585,42 +614,42 @@ func (a *App) showHelp() error {
 	// Show flags organized by groups
 	a.showOrganizedFlags()
 
-    // Commands (deterministic order)
-    if len(a.commands) > 0 {
-        println()
-        println("Commands:")
-        names := make([]string, 0, len(a.commands))
-        for name := range a.commands {
-            if !a.commands[name].Hidden {
-                names = append(names, name)
-            }
-        }
-        for i := 0; i < len(names); i++ {
-            for j := i + 1; j < len(names); j++ {
-                if names[j] < names[i] {
-                    names[i], names[j] = names[j], names[i]
-                }
-            }
-        }
-        for _, name := range names {
-            cmd := a.commands[name]
-            print("  ", name)
-            if cmd.Description() != "" {
-                print("\t", cmd.Description())
-            }
-            if len(cmd.Aliases) > 0 {
-                print(" (aliases: ")
-                for i, alias := range cmd.Aliases {
-                    if i > 0 {
-                        print(", ")
-                    }
-                    print(alias)
-                }
-                print(")")
-            }
-            println()
-        }
-    }
+	// Commands (deterministic order)
+	if len(a.commands) > 0 { //nolint:nestif // help rendering uses explicit nested branches for clarity
+		println()
+		println("Commands:")
+		names := make([]string, 0, len(a.commands))
+		for name := range a.commands {
+			if !a.commands[name].Hidden {
+				names = append(names, name)
+			}
+		}
+		for i := 0; i < len(names); i++ {
+			for j := i + 1; j < len(names); j++ {
+				if names[j] < names[i] {
+					names[i], names[j] = names[j], names[i]
+				}
+			}
+		}
+		for _, name := range names {
+			cmd := a.commands[name]
+			print("  ", name)
+			if cmd.Description() != "" {
+				print("\t", cmd.Description())
+			}
+			if len(cmd.Aliases) > 0 {
+				print(" (aliases: ")
+				for i, alias := range cmd.Aliases {
+					if i > 0 {
+						print(", ")
+					}
+					print(alias)
+				}
+				print(")")
+			}
+			println()
+		}
+	}
 
 	// Footer
 	println()
@@ -630,94 +659,96 @@ func (a *App) showHelp() error {
 }
 
 // showOrganizedFlags displays flags organized by groups
+//
+//nolint:gocognit // Structured flag rendering across groups/types is intentionally verbose.
 func (a *App) showOrganizedFlags() {
-    // Collect ungrouped flags (flags not in any group)
-    ungroupedFlags := make(map[string]*Flag)
-    groupedFlags := make(map[string]bool) // Track which flags are in groups
+	// Collect ungrouped flags (flags not in any group)
+	ungroupedFlags := make(map[string]*Flag)
+	groupedFlags := make(map[string]bool) // Track which flags are in groups
 
-    // Mark flags that are in groups
-    for _, group := range a.flagGroups {
-        for _, flag := range group.Flags {
-            groupedFlags[flag.Name] = true
-        }
-    }
+	// Mark flags that are in groups
+	for _, group := range a.flagGroups {
+		for _, flag := range group.Flags {
+			groupedFlags[flag.Name] = true
+		}
+	}
 
-    // Collect ungrouped flags
-    for name, flag := range a.flags {
-        if !groupedFlags[name] && !flag.Hidden {
-            ungroupedFlags[name] = flag
-        }
-    }
+	// Collect ungrouped flags
+	for name, flag := range a.flags {
+		if !groupedFlags[name] && !flag.Hidden {
+			ungroupedFlags[name] = flag
+		}
+	}
 
-    // Sort groups by name for deterministic output
-    groups := append(make([]*FlagGroup, 0, len(a.flagGroups)), a.flagGroups...)
-    for i := 0; i < len(groups); i++ {
-        for j := i + 1; j < len(groups); j++ {
-            if groups[j].Name < groups[i].Name {
-                groups[i], groups[j] = groups[j], groups[i]
-            }
-        }
-    }
+	// Sort groups by name for deterministic output
+	groups := append(make([]*FlagGroup, 0, len(a.flagGroups)), a.flagGroups...)
+	for i := 0; i < len(groups); i++ {
+		for j := i + 1; j < len(groups); j++ {
+			if groups[j].Name < groups[i].Name {
+				groups[i], groups[j] = groups[j], groups[i]
+			}
+		}
+	}
 
-    // Show flag groups first (sorted)
-    for _, group := range groups {
-        println()
-        if group.Description != "" {
-            println(group.Name + " - " + group.Description + ":")
-        } else {
-            println(group.Name + ":")
-        }
+	// Show flag groups first (sorted)
+	for _, group := range groups {
+		println()
+		if group.Description != "" {
+			println(group.Name + " - " + group.Description + ":")
+		} else {
+			println(group.Name + ":")
+		}
 
-        // sort flags by name
-        names := make([]string, 0, len(group.Flags))
-        for _, flag := range group.Flags {
-            if !flag.Hidden {
-                names = append(names, flag.Name)
-            }
-        }
-        for i := 0; i < len(names); i++ {
-            for j := i + 1; j < len(names); j++ {
-                if names[j] < names[i] {
-                    names[i], names[j] = names[j], names[i]
-                }
-            }
-        }
-        for _, name := range names {
-            a.showFlag(a.flags[name])
-        }
+		// sort flags by name
+		names := make([]string, 0, len(group.Flags))
+		for _, flag := range group.Flags {
+			if !flag.Hidden {
+				names = append(names, flag.Name)
+			}
+		}
+		for i := 0; i < len(names); i++ {
+			for j := i + 1; j < len(names); j++ {
+				if names[j] < names[i] {
+					names[i], names[j] = names[j], names[i]
+				}
+			}
+		}
+		for _, name := range names {
+			a.showFlag(a.flags[name])
+		}
 
-        // Show constraint info
-        constraintDesc := a.formatGroupConstraint(group.Constraint)
-        if constraintDesc != "" {
-            println("  Note:", constraintDesc)
-        }
-    }
+		// Show constraint info
+		constraintDesc := a.formatGroupConstraint(group.Constraint)
+		if constraintDesc != "" {
+			println("  Note:", constraintDesc)
+		}
+	}
 
-    // Show ungrouped flags
-    if len(ungroupedFlags) > 0 {
-        println()
-        if len(a.flagGroups) > 0 {
-            println("Global Flags:")
-        } else {
-            println("Flags:")
-        }
+	// Show ungrouped flags
+	if len(ungroupedFlags) > 0 {
+		println()
+		if len(a.flagGroups) > 0 {
+			println("Global Flags:")
+		} else {
+			println("Flags:")
+		}
 
-        // sort names
-        names := make([]string, 0, len(ungroupedFlags))
-        for n := range ungroupedFlags {
-            names = append(names, n)
-        }
-        for i := 0; i < len(names); i++ {
-            for j := i + 1; j < len(names); j++ {
-                if names[j] < names[i] {
-                    names[i], names[j] = names[j], names[i]
-                }
-            }
-        }
-        for _, n := range names {
-            a.showFlag(ungroupedFlags[n])
-        }
-    }
+		// sort names
+		names := make([]string, 0, len(ungroupedFlags))
+		for n := range ungroupedFlags {
+			names = append(names, n)
+		}
+		for i := 0; i < len(names); i++ {
+			for j := i + 1; j < len(names); j++ {
+				if names[j] < names[i] {
+					names[i], names[j] = names[j], names[i]
+				}
+			}
+		}
+		for _, n := range names {
+			a.showFlag(ungroupedFlags[n])
+		}
+	}
 }
 
 // showFlag displays a single flag with both long and short forms
@@ -750,7 +781,7 @@ func (a *App) showFlag(flag *Flag) {
 
 // formatGroupConstraint returns a human-readable constraint description
 func (a *App) formatGroupConstraint(constraint GroupConstraintType) string {
-	switch constraint {
+	switch constraint { // exhaustive over GroupConstraintType
 	case GroupMutuallyExclusive:
 		return "Only one of these flags can be used at a time"
 	case GroupRequiredGroup:
@@ -759,6 +790,10 @@ func (a *App) formatGroupConstraint(constraint GroupConstraintType) string {
 		return "Either all of these flags must be provided, or none"
 	case GroupExactlyOne:
 		return "Exactly one of these flags must be provided"
+	case GroupNoConstraint:
+		return ""
+	case GroupAtLeastOne:
+		return "At least one of these flags is required"
 	default:
 		return ""
 	}
@@ -766,52 +801,52 @@ func (a *App) formatGroupConstraint(constraint GroupConstraintType) string {
 
 // getDefaultValue returns the default value of a flag as a string
 func (a *App) getDefaultValue(flag *Flag) string {
-    switch flag.Type {
-    case FlagTypeString, FlagTypeEnum:
-        if flag.DefaultString != "" {
-            return flag.DefaultString
-        }
-    case FlagTypeInt:
-        if flag.DefaultInt != 0 {
-            return fmt.Sprintf("%d", flag.DefaultInt)
-        }
-    case FlagTypeBool:
-        if flag.DefaultBool {
-            return "true"
-        }
-    case FlagTypeDuration:
-        if flag.DefaultDuration != 0 {
-            return flag.DefaultDuration.String()
-        }
-    case FlagTypeFloat:
-        if flag.DefaultFloat != 0 {
-            return fmt.Sprintf("%g", flag.DefaultFloat)
-        }
-    case FlagTypeStringSlice:
-        if len(flag.DefaultStringSlice) > 0 {
-            // join with comma
-            s := ""
-            for i, v := range flag.DefaultStringSlice {
-                if i > 0 {
-                    s += ","
-                }
-                s += v
-            }
-            return s
-        }
-    case FlagTypeIntSlice:
-        if len(flag.DefaultIntSlice) > 0 {
-            s := ""
-            for i, v := range flag.DefaultIntSlice {
-                if i > 0 {
-                    s += ","
-                }
-                s += fmt.Sprintf("%d", v)
-            }
-            return s
-        }
-    }
-    return ""
+	switch flag.Type {
+	case FlagTypeString, FlagTypeEnum:
+		if flag.DefaultString != "" {
+			return flag.DefaultString
+		}
+	case FlagTypeInt:
+		if flag.DefaultInt != 0 {
+			return strconv.Itoa(flag.DefaultInt)
+		}
+	case FlagTypeBool:
+		if flag.DefaultBool {
+			return "true"
+		}
+	case FlagTypeDuration:
+		if flag.DefaultDuration != 0 {
+			return flag.DefaultDuration.String()
+		}
+	case FlagTypeFloat:
+		if flag.DefaultFloat != 0 {
+			return fmt.Sprintf("%g", flag.DefaultFloat)
+		}
+	case FlagTypeStringSlice:
+		if len(flag.DefaultStringSlice) > 0 {
+			// join with comma
+			s := ""
+			for i, v := range flag.DefaultStringSlice {
+				if i > 0 {
+					s += ","
+				}
+				s += v
+			}
+			return s
+		}
+	case FlagTypeIntSlice:
+		if len(flag.DefaultIntSlice) > 0 {
+			s := ""
+			for i, v := range flag.DefaultIntSlice {
+				if i > 0 {
+					s += ","
+				}
+				s += strconv.Itoa(v)
+			}
+			return s
+		}
+	}
+	return ""
 }
 
 // showVersion displays application version
@@ -821,6 +856,8 @@ func (a *App) showVersion() error {
 }
 
 // showCommandHelp displays detailed help for a specific command
+//
+//nolint:gocognit // Command help rendering prioritizes clarity over reduced nesting.
 func (a *App) showCommandHelp(cmd *Command) error {
 	// Command name and description
 	println(cmd.Description())
@@ -832,6 +869,7 @@ func (a *App) showCommandHelp(cmd *Command) error {
 	if len(cmd.flags) > 0 {
 		print(" [FLAGS]")
 	}
+
 	if len(cmd.subcommands) > 0 {
 		print(" SUBCOMMAND")
 	}
@@ -843,39 +881,45 @@ func (a *App) showCommandHelp(cmd *Command) error {
 		println(cmd.HelpText)
 	}
 
-    // Command-specific flags (organized by groups, deterministic order)
-    a.showOrganizedCommandFlags(cmd)
+	// Command-specific flags (organized by groups, deterministic order)
+	a.showOrganizedCommandFlags(cmd)
 
-    // Subcommands (sorted)
-    if len(cmd.subcommands) > 0 {
-        println()
-        println("Subcommands:")
-        names := make([]string, 0, len(cmd.subcommands))
-        for name, sc := range cmd.subcommands {
-            if !sc.Hidden { names = append(names, name) }
-        }
-        for i := 0; i < len(names); i++ {
-            for j := i + 1; j < len(names); j++ {
-                if names[j] < names[i] { names[i], names[j] = names[j], names[i] }
-            }
-        }
-        for _, name := range names {
-            subcmd := cmd.subcommands[name]
-            print("  ", name)
-            if subcmd.Description() != "" {
-                print("\t", subcmd.Description())
-            }
-            if len(subcmd.Aliases) > 0 {
-                print(" (aliases: ")
-                for i, alias := range subcmd.Aliases {
-                    if i > 0 { print(", ") }
-                    print(alias)
-                }
-                print(")")
-            }
-            println()
-        }
-    }
+	// Subcommands (sorted)
+	if len(cmd.subcommands) > 0 { //nolint:nestif // help rendering uses explicit nested branches for clarity
+		println()
+		println("Subcommands:")
+		names := make([]string, 0, len(cmd.subcommands))
+		for name, sc := range cmd.subcommands {
+			if !sc.Hidden {
+				names = append(names, name)
+			}
+		}
+		for i := 0; i < len(names); i++ {
+			for j := i + 1; j < len(names); j++ {
+				if names[j] < names[i] {
+					names[i], names[j] = names[j], names[i]
+				}
+			}
+		}
+		for _, name := range names {
+			subcmd := cmd.subcommands[name]
+			print("  ", name)
+			if subcmd.Description() != "" {
+				print("\t", subcmd.Description())
+			}
+			if len(subcmd.Aliases) > 0 {
+				print(" (aliases: ")
+				for i, alias := range subcmd.Aliases {
+					if i > 0 {
+						print(", ")
+					}
+					print(alias)
+				}
+				print(")")
+			}
+			println()
+		}
+	}
 
 	// Footer
 	println()
@@ -885,96 +929,98 @@ func (a *App) showCommandHelp(cmd *Command) error {
 }
 
 // showOrganizedCommandFlags displays command flags with grouping and deterministic order
+//
+//nolint:gocognit // Command flag organization mirrors app-level logic; acceptable complexity.
 func (a *App) showOrganizedCommandFlags(cmd *Command) {
-    if cmd == nil {
-        return
-    }
+	if cmd == nil {
+		return
+	}
 
-    // Track flags that are in groups
-    grouped := make(map[string]bool)
-    for _, g := range cmd.flagGroups {
-        for _, f := range g.Flags {
-            grouped[f.Name] = true
-        }
-    }
+	// Track flags that are in groups
+	grouped := make(map[string]bool)
+	for _, g := range cmd.flagGroups {
+		for _, f := range g.Flags {
+			grouped[f.Name] = true
+		}
+	}
 
-    // Print groups
-    for _, g := range cmd.flagGroups {
-        println()
-        if g.Description != "" {
-            println(g.Name + " - " + g.Description + ":")
-        } else {
-            println(g.Name + ":")
-        }
-        // deterministic order
-        names := make([]string, 0, len(g.Flags))
-        for _, f := range g.Flags {
-            if !f.Hidden {
-                names = append(names, f.Name)
-            }
-        }
-        // simple sort (no import to avoid clutter)
-        for i := 0; i < len(names); i++ {
-            for j := i + 1; j < len(names); j++ {
-                if names[j] < names[i] {
-                    names[i], names[j] = names[j], names[i]
-                }
-            }
-        }
-        for _, name := range names {
-            a.showFlag(cmd.flags[name])
-        }
-        constraintDesc := a.formatGroupConstraint(g.Constraint)
-        if constraintDesc != "" {
-            println("  Note:", constraintDesc)
-        }
-    }
+	// Print groups
+	for _, g := range cmd.flagGroups {
+		println()
+		if g.Description != "" {
+			println(g.Name + " - " + g.Description + ":")
+		} else {
+			println(g.Name + ":")
+		}
+		// deterministic order
+		names := make([]string, 0, len(g.Flags))
+		for _, f := range g.Flags {
+			if !f.Hidden {
+				names = append(names, f.Name)
+			}
+		}
+		// simple sort (no import to avoid clutter)
+		for i := 0; i < len(names); i++ {
+			for j := i + 1; j < len(names); j++ {
+				if names[j] < names[i] {
+					names[i], names[j] = names[j], names[i]
+				}
+			}
+		}
+		for _, name := range names {
+			a.showFlag(cmd.flags[name])
+		}
+		constraintDesc := a.formatGroupConstraint(g.Constraint)
+		if constraintDesc != "" {
+			println("  Note:", constraintDesc)
+		}
+	}
 
-    // Ungrouped flags
-    ungrouped := make([]string, 0)
-    for name, f := range cmd.flags {
-        if !f.Hidden && !grouped[name] {
-            ungrouped = append(ungrouped, name)
-        }
-    }
-    if len(ungrouped) > 0 {
-        // sort
-        for i := 0; i < len(ungrouped); i++ {
-            for j := i + 1; j < len(ungrouped); j++ {
-                if ungrouped[j] < ungrouped[i] {
-                    ungrouped[i], ungrouped[j] = ungrouped[j], ungrouped[i]
-                }
-            }
-        }
-        println()
-        println("Flags:")
-        for _, name := range ungrouped {
-            a.showFlag(cmd.flags[name])
-        }
-    }
+	// Ungrouped flags
+	ungrouped := make([]string, 0)
+	for name, f := range cmd.flags {
+		if !f.Hidden && !grouped[name] {
+			ungrouped = append(ungrouped, name)
+		}
+	}
+	if len(ungrouped) > 0 {
+		// sort
+		for i := 0; i < len(ungrouped); i++ {
+			for j := i + 1; j < len(ungrouped); j++ {
+				if ungrouped[j] < ungrouped[i] {
+					ungrouped[i], ungrouped[j] = ungrouped[j], ungrouped[i]
+				}
+			}
+		}
+		println()
+		println("Flags:")
+		for _, name := range ungrouped {
+			a.showFlag(cmd.flags[name])
+		}
+	}
 }
 
 // populateConfiguration handles configuration population during App.Run()
 func (a *App) populateConfiguration() error {
-    if a.configBuilder == nil {
-        return nil
-    }
+	if a.configBuilder == nil {
+		return nil
+	}
 
-    // Execute any pending source additions
-    for _, addSource := range a.configBuilder.pendingSources {
-        addSource()
-    }
+	// Execute any pending source additions
+	for _, addSource := range a.configBuilder.pendingSources {
+		addSource()
+	}
 
-    // Collect flag values now that we have parsed results
-    a.configBuilder.collectFlagValues()
+	// Collect flag values now that we have parsed results
+	a.configBuilder.collectFlagValues()
 
-    // Refresh environment source to ensure current process env is honored in CLI mode
-    if a.configBuilder.schema != nil {
-        envData := a.configBuilder.loadFromEnv()
-        if len(envData) > 0 {
-            a.configBuilder.precedenceManager.AddSource(SourceTypeEnv, envData)
-        }
-    }
+	// Refresh environment source to ensure current process env is honored in CLI mode
+	if a.configBuilder.schema != nil {
+		envData := a.configBuilder.loadFromEnv()
+		if len(envData) > 0 {
+			a.configBuilder.precedenceManager.AddSource(SourceTypeEnv, envData)
+		}
+	}
 
 	// Resolve configuration with precedence using the precedence manager
 	resolved, err := a.configBuilder.precedenceManager.ResolveWithSchema(a.configBuilder.schema)
@@ -1034,19 +1080,14 @@ func (a *App) showContextualHelp(result *ParseResult) error {
 	if result.Command == nil {
 		// Global context: show main application help
 		return a.showHelp()
-	} else {
-		// Command context: show command-specific help
-		return a.showCommandHelp(result.Command)
 	}
+	// Command context: show command-specific help
+	return a.showCommandHelp(result.Command)
 }
 
 // showContextualVersion displays version appropriate for the current command context
-func (a *App) showContextualVersion(result *ParseResult) error {
-	if result.Command == nil {
-		// Global context: show main application version
-		return a.showVersion()
-	} else {
-		// Command context: show application version (commands don't have separate versions)
-		return a.showVersion()
-	}
+func (a *App) showContextualVersion(_ *ParseResult) error {
+	// Currently both global and command contexts share the same version display.
+	// Kept as a separate method for symmetry with showContextualHelp.
+	return a.showVersion()
 }

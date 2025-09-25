@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
 
 jobs:
   build-test:
@@ -16,7 +16,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22.x'
+          go-version: "1.22.x"
           check-latest: true
 
       - name: Go cache
@@ -35,7 +35,11 @@ jobs:
       - name: Test
         run: make test
 
+      - name: Lint
+        uses: golangci/golangci-lint-action@v7.0.0 # Use the latest version
+        with:
+          version: v2.1.5 # Or your specific linter version
+
       - name: Bench (smoke)
         run: make bench
         continue-on-error: true
-

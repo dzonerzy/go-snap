@@ -51,7 +51,10 @@ func Recovery(options ...MiddlewareOption) Middleware {
 }
 
 // RecoveryWithHandler creates a recovery middleware with a custom panic handler
-func RecoveryWithHandler(handler func(panic any, command string, stack []byte) error, options ...MiddlewareOption) Middleware {
+func RecoveryWithHandler(
+	handler func(panicVal any, command string, stack []byte) error,
+	options ...MiddlewareOption,
+) Middleware {
 	config := DefaultConfig()
 	for _, option := range options {
 		option(config)
@@ -104,8 +107,8 @@ func NoopRecovery() Middleware {
 func MustRecover() Middleware {
 	// Check if we're in development mode (basic heuristic)
 	isDev := os.Getenv("GO_ENV") == "development" ||
-			 os.Getenv("ENV") == "dev" ||
-			 os.Getenv("ENVIRONMENT") == "development"
+		os.Getenv("ENV") == "dev" ||
+		os.Getenv("ENVIRONMENT") == "development"
 
 	if isDev {
 		return RecoveryWithStack()
@@ -147,9 +150,9 @@ func SafeRecovery() Middleware {
 
 // RecoveryStats tracks recovery statistics
 type RecoveryStats struct {
-	TotalPanics    int
-	CommandPanics  map[string]int
-	LastPanic      *RecoveryError
+	TotalPanics   int
+	CommandPanics map[string]int
+	LastPanic     *RecoveryError
 }
 
 // NewRecoveryStats creates a new recovery statistics tracker

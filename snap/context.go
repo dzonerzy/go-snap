@@ -1,22 +1,22 @@
 package snap
 
 import (
-    "context"
-    stdio "io"
-    "time"
+	"context"
+	stdio "io"
+	"time"
 
-    "github.com/dzonerzy/go-snap/middleware"
-    snapio "github.com/dzonerzy/go-snap/io"
+	snapio "github.com/dzonerzy/go-snap/io"
+	"github.com/dzonerzy/go-snap/middleware"
 )
 
 // Context provides execution context and lifecycle management
 type Context struct {
-    App      *App
-    Result   *ParseResult
-    ctx      context.Context
-    parent   *Context
-    cancel   context.CancelFunc
-    metadata map[string]any
+	App      *App
+	Result   *ParseResult
+	ctx      context.Context
+	parent   *Context
+	cancel   context.CancelFunc
+	metadata map[string]any
 }
 
 // Context methods for accessing the underlying Go context
@@ -28,11 +28,11 @@ func (c *Context) Context() context.Context {
 
 // WithContext creates a new Context with a different underlying context
 func (c *Context) WithContext(ctx context.Context) *Context {
-    return &Context{
-        App:    c.App,
-        Result: c.Result,
-        ctx:    ctx,
-    }
+	return &Context{
+		App:    c.App,
+		Result: c.Result,
+		ctx:    ctx,
+	}
 }
 
 // Deadline returns the time when work done on behalf of this context should be canceled
@@ -67,31 +67,37 @@ func (c *Context) Set(key string, value any) {
 
 // Get retrieves a value from the context metadata
 func (c *Context) Get(key string) any {
-    if c.metadata == nil {
-        return nil
-    }
-    return c.metadata[key]
+	if c.metadata == nil {
+		return nil
+	}
+	return c.metadata[key]
 }
 
 // Exit helpers integrate with ExitCodeManager. They store an exit request
 // in context metadata and cancel the context; App handles mapping at the end.
 func (c *Context) Exit(code int) {
-    if c.metadata == nil { c.metadata = make(map[string]any) }
-    c.metadata["__exit_error__"] = &ExitError{Code: code}
-    c.Cancel()
+	if c.metadata == nil {
+		c.metadata = make(map[string]any)
+	}
+	c.metadata["__exit_error__"] = &ExitError{Code: code}
+	c.Cancel()
 }
 
 func (c *Context) ExitWithError(err error, code int) {
-    if c.metadata == nil { c.metadata = make(map[string]any) }
-    c.metadata["__exit_error__"] = &ExitError{Code: code, Err: err}
-    c.Cancel()
+	if c.metadata == nil {
+		c.metadata = make(map[string]any)
+	}
+	c.metadata["__exit_error__"] = &ExitError{Code: code, Err: err}
+	c.Cancel()
 }
 
 func (c *Context) ExitOnError(err error) {
-    if err == nil { return }
-    mgr := c.App.ExitCodes()
-    code := mgr.resolve(err)
-    c.ExitWithError(err, code)
+	if err == nil {
+		return
+	}
+	mgr := c.App.ExitCodes()
+	code := mgr.resolve(err)
+	c.ExitWithError(err, code)
 }
 
 // Cancel cancels the context
@@ -103,7 +109,7 @@ func (c *Context) Cancel() {
 
 // Parent returns the parent context
 func (c *Context) Parent() *Context {
-    return c.parent
+	return c.parent
 }
 
 // IO accessors
@@ -270,19 +276,19 @@ func (c *Context) NArgs() int {
 
 // Arg returns the positional argument at index i
 func (c *Context) Arg(i int) string {
-    if i >= 0 && i < len(c.Result.Args) {
-        return c.Result.Args[i]
-    }
-    return ""
+	if i >= 0 && i < len(c.Result.Args) {
+		return c.Result.Args[i]
+	}
+	return ""
 }
 
 // WrapperResult returns the last ExecResult produced by a wrapper when running
 // with Capture() or CaptureTo(). It returns (nil, false) if no result is
 // available.
 func (c *Context) WrapperResult() (*ExecResult, bool) {
-    v := c.Get("__wrapper_result__")
-    if r, ok := v.(*ExecResult); ok {
-        return r, true
-    }
-    return nil, false
+	v := c.Get("__wrapper_result__")
+	if r, ok := v.(*ExecResult); ok {
+		return r, true
+	}
+	return nil, false
 }

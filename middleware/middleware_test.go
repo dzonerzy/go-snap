@@ -1,14 +1,15 @@
+//nolint:testpackage // using package name 'middleware' to access unexported fields for testing
 package middleware
 
 import (
-    "bytes"
-    "errors"
-    "fmt"
-    "os"
-    "path/filepath"
-    "strings"
-    "testing"
-    "time"
+	"bytes"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
 )
 
 // Mock implementations for testing
@@ -112,10 +113,10 @@ func (m *MockCommand) Name() string        { return m.name }
 func (m *MockCommand) Description() string { return m.description }
 
 // Mock action functions for testing
-func successAction(ctx Context) error { return nil }
-func errorAction(ctx Context) error   { return errors.New("test error") }
-func panicAction(ctx Context) error   { panic("test panic") }
-func slowAction(ctx Context) error {
+func successAction(_ Context) error { return nil }
+func errorAction(_ Context) error   { return errors.New("test error") }
+func panicAction(_ Context) error   { panic("test panic") }
+func slowAction(_ Context) error {
 	time.Sleep(100 * time.Millisecond)
 	return nil
 }
@@ -143,7 +144,7 @@ func TestMiddlewareChain(t *testing.T) {
 		}
 	}
 
-	action := func(ctx Context) error {
+	action := func(_ Context) error {
 		order = append(order, "action")
 		return nil
 	}
@@ -171,81 +172,124 @@ func TestMiddlewareChain(t *testing.T) {
 }
 
 func TestLoggerConstructors(t *testing.T) {
-    // Text logger (InfoLogger)
-    var buf bytes.Buffer
-    mw := LoggerWithWriter(&buf, WithLogLevel(LogLevelInfo))
-    if err := mw(successAction)(NewMockContext()); err != nil { t.Fatalf("err: %v", err) }
-    if out := buf.String(); !strings.Contains(out, "START") && out == "" {
-        t.Fatalf("expected text logs, got %q", out)
-    }
-    // JSON logger
-    buf.Reset()
-    mw = LoggerWithWriter(&buf, func(c *MiddlewareConfig){ c.LogFormat = LogFormatJSON; c.LogLevel = LogLevelInfo })
-    if err := mw(successAction)(NewMockContext()); err != nil { t.Fatalf("err: %v", err) }
-    if out := buf.String(); !strings.Contains(out, "\"timestamp\"") { t.Fatalf("expected json log, got %q", out) }
-    // Silent logger
-    buf.Reset()
-    mw = Logger(func(c *MiddlewareConfig){ c.LogOutput = LogOutputNone })
-    if err := mw(successAction)(NewMockContext()); err != nil { t.Fatalf("err: %v", err) }
-    if out := buf.String(); out != "" { t.Fatalf("expected no output, got %q", out) }
+	// Text logger (InfoLogger)
+	var buf bytes.Buffer
+	mw := LoggerWithWriter(&buf, WithLogLevel(LogLevelInfo))
+	if err := mw(successAction)(NewMockContext()); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if out := buf.String(); !strings.Contains(out, "START") && out == "" {
+		t.Fatalf("expected text logs, got %q", out)
+	}
+	// JSON logger
+	buf.Reset()
+	mw = LoggerWithWriter(&buf, func(c *MiddlewareConfig) { c.LogFormat = LogFormatJSON; c.LogLevel = LogLevelInfo })
+	if err := mw(successAction)(NewMockContext()); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if out := buf.String(); !strings.Contains(out, "\"timestamp\"") {
+		t.Fatalf("expected json log, got %q", out)
+	}
+	// Silent logger
+	buf.Reset()
+	mw = Logger(func(c *MiddlewareConfig) { c.LogOutput = LogOutputNone })
+	if err := mw(successAction)(NewMockContext()); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if out := buf.String(); out != "" {
+		t.Fatalf("expected no output, got %q", out)
+	}
 }
 
 func TestTimeoutVariants(t *testing.T) {
-    // TimeoutWithDefault
-    twd := TimeoutWithDefault()
-    if err := twd(successAction)(NewMockContext()); err != nil { t.Fatalf("unexpected err: %v", err) }
-    // TimeoutWithGracefulShutdown (short timeout)
-    tgs := TimeoutWithGracefulShutdown(5*time.Millisecond, 1*time.Millisecond)
-    err := tgs(slowAction)(NewMockContext())
-    if _, ok := err.(*TimeoutError); !ok { t.Fatalf("expected TimeoutError, got %T", err) }
-    // TimeoutPerCommand
-    per := TimeoutPerCommand(map[string]time.Duration{"test": 1 * time.Millisecond}, 1*time.Second)
-    err = per(slowAction)(NewMockContext())
-    if _, ok := err.(*TimeoutError); !ok { t.Fatalf("expected TimeoutError for per-command, got %T", err) }
-    // TimeoutWithCallback
-    called := make(chan struct{},1)
-    cb := TimeoutWithCallback(1*time.Millisecond, func(string, time.Duration){ called <- struct{}{} })
-    _ = cb(slowAction)(NewMockContext())
-    select { case <-called: default: t.Fatalf("expected callback invoked") }
-    // TimeoutWithRetry
-    attempts := 0
-    retry := TimeoutWithRetry(1*time.Millisecond, 2)
-    err = retry(func(ctx Context) error { attempts++; return &TimeoutError{Duration:1*time.Millisecond, Command: getCommandName(ctx)} })(NewMockContext())
-    if attempts < 3 { t.Fatalf("expected retries, attempts=%d", attempts) }
-    // DynamicTimeout: 0 -> no timeout, >0 -> timeout
-    dyn := DynamicTimeout(func(Context) time.Duration { return 0 })
-    if err := dyn(slowAction)(NewMockContext()); err != nil { t.Fatalf("dynamic 0 unexpected err: %v", err) }
-    dyn = DynamicTimeout(func(Context) time.Duration { return 1 * time.Millisecond })
-    if err := dyn(slowAction)(NewMockContext()); err == nil { t.Fatalf("expected timeout") }
+	// TimeoutWithDefault
+	twd := TimeoutWithDefault()
+	if err := twd(successAction)(NewMockContext()); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	// TimeoutWithGracefulShutdown (short timeout)
+	tgs := TimeoutWithGracefulShutdown(5*time.Millisecond, 1*time.Millisecond)
+	err := tgs(slowAction)(NewMockContext())
+	timeoutError := &TimeoutError{}
+	if !errors.As(err, &timeoutError) {
+		t.Fatalf("expected TimeoutError, got %T", err)
+	}
+	// TimeoutPerCommand
+	per := TimeoutPerCommand(map[string]time.Duration{"test": 1 * time.Millisecond}, 1*time.Second)
+	err = per(slowAction)(NewMockContext())
+	timeoutError = &TimeoutError{}
+	if !errors.As(err, &timeoutError) {
+		t.Fatalf("expected TimeoutError for per-command, got %T", err)
+	}
+	// TimeoutWithCallback
+	called := make(chan struct{}, 1)
+	cb := TimeoutWithCallback(1*time.Millisecond, func(string, time.Duration) { called <- struct{}{} })
+	_ = cb(slowAction)(NewMockContext())
+	select {
+	case <-called:
+	default:
+		t.Fatalf("expected callback invoked")
+	}
+	// TimeoutWithRetry
+	attempts := 0
+	retry := TimeoutWithRetry(1*time.Millisecond, 2)
+	_ = retry(func(ctx Context) error {
+		attempts++
+		return &TimeoutError{Duration: 1 * time.Millisecond, Command: getCommandName(ctx)}
+	})(NewMockContext())
+	if attempts < 3 {
+		t.Fatalf("expected retries, attempts=%d", attempts)
+	}
+	// DynamicTimeout: 0 -> no timeout, >0 -> timeout
+	dyn := DynamicTimeout(func(Context) time.Duration { return 0 })
+	if dynErr := dyn(slowAction)(NewMockContext()); dynErr != nil {
+		t.Fatalf("dynamic 0 unexpected err: %v", dynErr)
+	}
+	dyn = DynamicTimeout(func(Context) time.Duration { return 1 * time.Millisecond })
+	if dynErr := dyn(slowAction)(NewMockContext()); dynErr == nil {
+		t.Fatalf("expected timeout")
+	}
 }
 
 func TestTimeoutFromFlagAndStats(t *testing.T) {
-    // MockContext has Duration(name) implemented via map; we can simulate by setting metadata
-    ctx := NewMockContext()
-    ctx.durationFlags["timeout"] = 1 * time.Millisecond
-    tff := TimeoutFromFlag("timeout", 1*time.Second)
-    if err := tff(slowAction)(ctx); err == nil { t.Fatalf("expected timeout from flag") }
+	// MockContext has Duration(name) implemented via map; we can simulate by setting metadata
+	ctx := NewMockContext()
+	ctx.durationFlags["timeout"] = 1 * time.Millisecond
+	tff := TimeoutFromFlag("timeout", 1*time.Second)
+	if err := tff(slowAction)(ctx); err == nil {
+		t.Fatalf("expected timeout from flag")
+	}
 
-    stats := NewTimeoutStats()
-    tws := TimeoutWithStats(1*time.Millisecond, stats)
-    _ = tws(slowAction)(NewMockContext())
-    if stats.TotalTimeouts == 0 || stats.LastTimeout == nil { t.Fatalf("expected stats updated") }
+	stats := NewTimeoutStats()
+	tws := TimeoutWithStats(1*time.Millisecond, stats)
+	_ = tws(slowAction)(NewMockContext())
+	if stats.TotalTimeouts == 0 || stats.LastTimeout == nil {
+		t.Fatalf("expected stats updated")
+	}
 }
 
 func TestValidatorVariants(t *testing.T) {
-    // ConditionalRequired: when condition true, missing flags should error
-    cond := func(Context) error { return nil } // condition met
-    v := ValidatorWithCustom(map[string]ValidatorFunc{"cond": ConditionalRequired(cond, "must")})
-    if err := v(successAction)(NewMockContext()); err == nil { t.Fatalf("expected validation error") }
+	// ConditionalRequired: when condition true, missing flags should error
+	cond := func(Context) error { return nil } // condition met
+	v := ValidatorWithCustom(map[string]ValidatorFunc{"cond": ConditionalRequired(cond, "must")})
+	if err := v(successAction)(NewMockContext()); err == nil {
+		t.Fatalf("expected validation error")
+	}
 
-    // WithCustomValidators + NoopValidator path
-    cust := ValidatorWithCustom(map[string]ValidatorFunc{"ok": func(Context) error { return nil }})
-    if err := cust(successAction)(NewMockContext()); err != nil { t.Fatalf("unexpected err: %v", err) }
+	// WithCustomValidators + NoopValidator path
+	cust := ValidatorWithCustom(map[string]ValidatorFunc{"ok": func(Context) error { return nil }})
+	if err := cust(successAction)(NewMockContext()); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
 
-    // FileSystemValidator (placeholders succeed) — ensure it runs without error
-    fsv := FileSystemValidator([]string{"file"}, []string{"dir"})
-    ctx := NewMockContext(); ctx.Set("file", "path"); ctx.Set("dir", "path")
-    if err := fsv(successAction)(ctx); err != nil { t.Fatalf("unexpected fs validator err: %v", err) }
+	// FileSystemValidator (placeholders succeed) — ensure it runs without error
+	fsv := FileSystemValidator([]string{"file"}, []string{"dir"})
+	ctx := NewMockContext()
+	ctx.Set("file", "path")
+	ctx.Set("dir", "path")
+	if err := fsv(successAction)(ctx); err != nil {
+		t.Fatalf("unexpected fs validator err: %v", err)
+	}
 }
 
 // Test Logger Middleware
@@ -316,7 +360,8 @@ func TestRecovery(t *testing.T) {
 		t.Error("Expected recovery error")
 	}
 
-	recoveryErr, ok := err.(*RecoveryError)
+	recoveryErr := &RecoveryError{}
+	ok := errors.As(err, &recoveryErr)
 	if !ok {
 		t.Errorf("Expected RecoveryError, got %T", err)
 	}
@@ -336,7 +381,8 @@ func TestRecoveryWithStack(t *testing.T) {
 	ctx := NewMockContext()
 	err := recovery(panicAction)(ctx)
 
-	recoveryErr, ok := err.(*RecoveryError)
+	recoveryErr := &RecoveryError{}
+	ok := errors.As(err, &recoveryErr)
 	if !ok {
 		t.Errorf("Expected RecoveryError, got %T", err)
 	}
@@ -375,7 +421,8 @@ func TestTimeout(t *testing.T) {
 		t.Error("Expected timeout error")
 	}
 
-	timeoutErr, ok := err.(*TimeoutError)
+	timeoutErr := &TimeoutError{}
+	ok := errors.As(err, &timeoutErr)
 	if !ok {
 		t.Errorf("Expected TimeoutError, got %T", err)
 	}
@@ -448,7 +495,8 @@ func TestBusinessLogicValidator(t *testing.T) {
 		t.Error("Expected validation error when API enabled but no key")
 	}
 
-	validationErr, ok := err.(*ValidationError)
+	validationErr := &ValidationError{}
+	ok := errors.As(err, &validationErr)
 	if !ok {
 		t.Errorf("Expected ValidationError, got %T", err)
 	}
@@ -503,43 +551,45 @@ func TestFileSystemValidator(t *testing.T) {
 }
 
 func TestFileAndDirectoryValidators(t *testing.T) {
-    // Prepare filesystem
-    dir := t.TempDir()
-    file, err := os.CreateTemp(dir, "sample-*.txt")
-    if err != nil { t.Fatalf("create temp file: %v", err) }
-    filePath := file.Name()
-    _ = file.Close()
+	// Prepare filesystem
+	dir := t.TempDir()
+	file, err := os.CreateTemp(dir, "sample-*.txt")
+	if err != nil {
+		t.Fatalf("create temp file: %v", err)
+	}
+	filePath := file.Name()
+	_ = file.Close()
 
-    v := FileSystemValidator([]string{"file"}, []string{"dir"})
+	v := FileSystemValidator([]string{"file"}, []string{"dir"})
 
-    // Happy path
-    ctx := NewMockContext()
-    ctx.SetString("file", filePath)
-    ctx.SetString("dir", dir)
-    if err := v(successAction)(ctx); err != nil {
-        t.Fatalf("expected no error, got %v", err)
-    }
+	// Happy path
+	ctx := NewMockContext()
+	ctx.SetString("file", filePath)
+	ctx.SetString("dir", dir)
+	if vErr := v(successAction)(ctx); vErr != nil {
+		t.Fatalf("expected no error, got %v", vErr)
+	}
 
-    // Missing file
-    ctx2 := NewMockContext()
-    ctx2.SetString("file", filepath.Join(dir, "missing.txt"))
-    if err := v(successAction)(ctx2); err == nil {
-        t.Fatalf("expected error for missing file")
-    }
+	// Missing file
+	ctx2 := NewMockContext()
+	ctx2.SetString("file", filepath.Join(dir, "missing.txt"))
+	if vErr := v(successAction)(ctx2); vErr == nil {
+		t.Fatalf("expected error for missing file")
+	}
 
-    // Wrong type: directory given to file validator
-    ctx3 := NewMockContext()
-    ctx3.SetString("file", dir)
-    if err := v(successAction)(ctx3); err == nil {
-        t.Fatalf("expected error for directory as file")
-    }
+	// Wrong type: directory given to file validator
+	ctx3 := NewMockContext()
+	ctx3.SetString("file", dir)
+	if vErr := v(successAction)(ctx3); vErr == nil {
+		t.Fatalf("expected error for directory as file")
+	}
 
-    // Wrong type: file given to directory validator
-    ctx4 := NewMockContext()
-    ctx4.SetString("dir", filePath)
-    if err := v(successAction)(ctx4); err == nil {
-        t.Fatalf("expected error for file as directory")
-    }
+	// Wrong type: file given to directory validator
+	ctx4 := NewMockContext()
+	ctx4.SetString("dir", filePath)
+	if vErr := v(successAction)(ctx4); vErr == nil {
+		t.Fatalf("expected error for file as directory")
+	}
 }
 
 func TestConditionalValidator(t *testing.T) {
@@ -664,7 +714,8 @@ func TestMiddlewareOrderMatters(t *testing.T) {
 		t.Error("Expected timeout error")
 	}
 
-	if _, ok := err.(*TimeoutError); !ok {
+	timeoutError := &TimeoutError{}
+	if !errors.As(err, &timeoutError) {
 		t.Errorf("Expected TimeoutError, got %T", err)
 	}
 }
@@ -674,7 +725,7 @@ func TestMiddlewareOrderMatters(t *testing.T) {
 // Test error propagation
 func TestErrorPropagation(t *testing.T) {
 	testError := errors.New("original error")
-	errorAction := func(ctx Context) error {
+	errAction := func(_ Context) error {
 		return testError
 	}
 
@@ -685,9 +736,9 @@ func TestErrorPropagation(t *testing.T) {
 	)
 
 	ctx := NewMockContext()
-	err := chain.Apply(errorAction)(ctx)
+	err := chain.Apply(errAction)(ctx)
 
-	if err != testError {
+	if !errors.Is(err, testError) {
 		t.Errorf("Expected original error to be propagated, got %v", err)
 	}
 }
@@ -766,9 +817,13 @@ func TestComprehensiveValidationExample(t *testing.T) {
 					requiredMemory := workers * 512
 					if memory < requiredMemory {
 						return &ValidationError{
-							Field:   "memory",
-							Value:   memory,
-							Message: fmt.Sprintf("insufficient memory: %d workers require at least %d MB", workers, requiredMemory),
+							Field: "memory",
+							Value: memory,
+							Message: fmt.Sprintf(
+								"insufficient memory: %d workers require at least %d MB",
+								workers,
+								requiredMemory,
+							),
 						}
 					}
 				}
