@@ -29,6 +29,19 @@ FlagBuilder modifiers (implemented)
 - `Validate(func(T) error)` – typed validator
 - `Back()` – return to parent builder
 
+Single-letter aliases
+- Use `.Short('x')` to define a POSIX-style short alias for any flag.
+- Short flags can be combined (`-abc`) and are parsed in O(1) using a precomputed table.
+```go
+app := snap.New("tool", "")
+app.IntFlag("port", "Port").Short('p').Back()
+app.BoolFlag("quiet", "Quiet").Short('q').Global().Back()
+```
+
+Available typed flag builders
+- At app-level and command-level: `StringFlag`, `IntFlag`, `BoolFlag`, `DurationFlag`, `FloatFlag`, `EnumFlag`, `StringSliceFlag`, `IntSliceFlag`.
+- Within groups: the same set is available on `*FlagGroupBuilder`.
+
 Convenience validators (from `snap/flag.go`)
 - `Range(fb, min, max)` for `int`/`float64`
 - `OneOf(fb, values...)` for `string`
