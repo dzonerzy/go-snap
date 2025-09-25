@@ -38,7 +38,7 @@ jobs:
       - name: Lint
         uses: golangci/golangci-lint-action@v7.0.0 # Use the latest version
         with:
-          version: 2.2.1 # Or your specific linter version
+          version: v2.2.1 # Or your specific linter version
 
       - name: Bench (smoke)
         run: make bench
