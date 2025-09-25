@@ -23,6 +23,7 @@ IO demo
 Wrapper DSL
 - `examples/wrapper-echo/main.go`: Echo wrapper with preserved leading flags.
 - `examples/wrapper-go-build/main.go`: `go build` wrapper with dynamic toolexec shim.
+- `examples/nested-subcommands/main.go`: Nested commands (e.g., `myapp server up`).
 
 Smart errors
 - `examples/smart_errors/error_demo.go`: Error suggestions and handler tuning.
