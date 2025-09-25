@@ -45,6 +45,28 @@ CommandBuilder methods (implemented)
 - `Command(name, description string) *CommandBuilder` (subcommands)
 - Flag methods (typed) – see Flags & Groups
 
+Nested subcommands
+```go
+app := snap.New("myapp", "demo")
+
+srv := app.Command("server", "Server management")
+srv.Command("up", "Start the server").
+    BoolFlag("dry-run", "Print the action only").Short('n').Back().
+    Action(func(ctx *snap.Context) error { /* ... */ return nil })
+
+srv.Command("down", "Stop the server").
+    BoolFlag("force", "Force stop").Short('f').Back().
+    Action(func(ctx *snap.Context) error { /* ... */ return nil })
+
+// Invocations:
+//   myapp server up --dry-run
+//   myapp server down --force
+```
+
+Tip: returning to the parent builder
+- The fluent builders use `Back()` to return to the parent context after finishing a flag definition. This makes chaining explicit and predictable.
+- Example: `BoolFlag("force", "").Short('f').Back()` defines the flag, sets a short alias, then returns to the command builder for more methods.
+
 Help & Version
 - App automatically provides `--help` unless `DisableHelp()` is used
 - If `Version()` is set, `--version` is handled at all levels
