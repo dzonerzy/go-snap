@@ -96,6 +96,7 @@ type ErrorHandler struct {
 	suggestFlags    bool
 	maxDistance     int
 	customHandlers  map[ErrorType]func(*CLIError) *CLIError
+	showHelpOnError bool
 }
 
 // NewErrorHandler creates a new error handler with defaults
@@ -123,6 +124,14 @@ func (eh *ErrorHandler) SuggestFlags(enabled bool) *ErrorHandler {
 // MaxDistance sets the maximum edit distance for suggestions
 func (eh *ErrorHandler) MaxDistance(distance int) *ErrorHandler {
 	eh.maxDistance = distance
+	return eh
+}
+
+// ShowHelpOnError controls whether contextual help is printed after an error.
+// When enabled, app-level or command-level help is displayed based on the
+// current parse context.
+func (eh *ErrorHandler) ShowHelpOnError(enabled bool) *ErrorHandler {
+	eh.showHelpOnError = enabled
 	return eh
 }
 
@@ -231,6 +240,16 @@ func (eh *ErrorHandler) DisplayError(err *CLIError, app *App) {
 	}
 
 	fmt.Fprintf(os.Stderr, "\n")
+
+	// Optionally print contextual help after the error
+	if eh.showHelpOnError {
+		if app.currentResult != nil && app.currentResult.Command != nil {
+			_ = app.showCommandHelp(app.currentResult.Command)
+		} else {
+			_ = app.showHelp()
+		}
+		fmt.Fprintf(os.Stderr, "\n")
+	}
 }
 
 // showFlagGroupHelp displays help for a specific flag group
