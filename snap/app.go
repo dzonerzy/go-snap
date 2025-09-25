@@ -348,6 +348,9 @@ func (a *App) RunWithArgs(ctx context.Context, args []string) error {
 		case result.Command.wrapper != nil:
 			// Command-level wrapper (no explicit action)
 			actionErr = result.Command.wrapper.run(execCtx, args)
+		default:
+			// No explicit action or wrapper: show the command help (especially when it has subcommands)
+			actionErr = a.showCommandHelp(result.Command)
 		}
 	} else {
 		// No command specified, check if app has a default wrapper
@@ -522,6 +525,11 @@ func (a *App) addHelpFlag() {
 			Global:      true,
 		}
 		a.flags["help"] = flag
+		// Provide -h by default if not already in use
+		if _, taken := a.shortFlags['h']; !taken {
+			flag.Short = 'h'
+			a.shortFlags['h'] = flag
+		}
 	}
 }
 
@@ -548,6 +556,11 @@ func (a *App) addCommandHelpFlag(cmd *Command) {
 			Global:      false,
 		}
 		cmd.flags["help"] = flag
+		// Provide -h by default at command level if not already in use
+		if _, taken := cmd.shortFlags['h']; !taken {
+			flag.Short = 'h'
+			cmd.shortFlags['h'] = flag
+		}
 	}
 }
 
