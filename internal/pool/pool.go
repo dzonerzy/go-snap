@@ -10,10 +10,10 @@ import (
 // Pool provides a generic, type-safe object pool with automatic cleanup
 type Pool[T any] struct {
 	pool    sync.Pool
-	reset   func(*T)    // Optional reset function called before reuse
-	cleanup func(*T)    // Optional cleanup function for pool eviction
-	maxSize int         // Maximum objects to keep (0 = unlimited)
-	count   int64       // Current pool size (approximate)
+	reset   func(*T)     // Optional reset function called before reuse
+	cleanup func(*T)     // Optional cleanup function for pool eviction
+	maxSize int          // Maximum objects to keep (0 = unlimited)
+	count   int64        // Current pool size (approximate)
 	mutex   sync.RWMutex // Protects count
 }
 
@@ -38,6 +38,7 @@ func NewPoolWithReset[T any](factory func() *T, reset func(*T)) *Pool[T] {
 
 // Get retrieves an object from the pool or creates a new one
 func (p *Pool[T]) Get() *T {
+	//nolint:errcheck // sync.Pool.Get() never returns an error
 	obj := p.pool.Get().(*T)
 	if p.reset != nil {
 		p.reset(obj)
@@ -81,8 +82,8 @@ func (p *Pool[T]) SetMaxSize(size int) {
 	p.maxSize = size
 }
 
-// Stats returns approximate pool statistics
-func (p *Pool[T]) Stats() (count int64, maxSize int) {
+// Stats returns approximate pool statistics: current count and max size.
+func (p *Pool[T]) Stats() (int64, int) {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
 	return p.count, p.maxSize
@@ -94,10 +95,10 @@ type BufferPool struct {
 	mutex sync.RWMutex
 
 	// Configuration
-	minCap    int   // Minimum capacity
-	maxCap    int   // Maximum capacity
-	buckets   []int // Capacity buckets
-	defaultCap int  // Default capacity
+	minCap     int   // Minimum capacity
+	maxCap     int   // Maximum capacity
+	buckets    []int // Capacity buckets
+	defaultCap int   // Default capacity
 }
 
 // NewBufferPool creates a new buffer pool with capacity-based buckets
@@ -105,10 +106,10 @@ func NewBufferPool() *BufferPool {
 	buckets := []int{64, 128, 256, 512, 1024, 2048, 4096}
 
 	bp := &BufferPool{
-		pools:     make(map[int]*Pool[[]byte]),
-		minCap:    64,
-		maxCap:    4096,
-		buckets:   buckets,
+		pools:      make(map[int]*Pool[[]byte]),
+		minCap:     64,
+		maxCap:     4096,
+		buckets:    buckets,
 		defaultCap: 256,
 	}
 
@@ -335,6 +336,8 @@ var (
 )
 
 // init pre-warms the global pools for optimal CLI performance
+//
+//nolint:gochecknoinits // Global pools require init for pre-warming
 func init() {
 	// Pre-warm buffer pool with common CLI parsing sizes
 	for i := 0; i < 5; i++ {

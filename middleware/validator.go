@@ -1,9 +1,10 @@
 package middleware
 
 import (
-    "fmt"
-    "os"
-    "strings"
+	"errors"
+	"fmt"
+	"os"
+	"strings"
 )
 
 // ValidatorFunc represents a custom validation function for business logic validation.
@@ -40,7 +41,8 @@ func Validator(options ...MiddlewareOption) Middleware {
 			for name, validator := range config.CustomValidators {
 				if err := validator(ctx); err != nil {
 					// If it's already a ValidationError, return it directly
-					if validationErr, ok := err.(*ValidationError); ok {
+					validationErr := &ValidationError{}
+					if errors.As(err, &validationErr) {
 						return validationErr
 					}
 					// Otherwise, wrap it
@@ -68,7 +70,8 @@ func ValidatorWithCustom(validators map[string]ValidatorFunc) Middleware {
 			for name, validator := range validators {
 				if err := validator(ctx); err != nil {
 					// If it's already a ValidationError, return it directly
-					if validationErr, ok := err.(*ValidationError); ok {
+					validationErr := &ValidationError{}
+					if errors.As(err, &validationErr) {
 						return validationErr
 					}
 					// Otherwise, wrap it
@@ -89,41 +92,44 @@ func ValidatorWithCustom(validators map[string]ValidatorFunc) Middleware {
 // NamedValidator associates a human-readable name with a ValidatorFunc for
 // clearer error reporting and easier composition.
 type NamedValidator struct {
-    Name string
-    Fn   ValidatorFunc
+	Name string
+	Fn   ValidatorFunc
 }
 
 // Custom wraps an arbitrary ValidatorFunc with a name for reporting.
 func Custom(name string, fn ValidatorFunc) NamedValidator {
-    return NamedValidator{Name: name, Fn: fn}
+	return NamedValidator{Name: name, Fn: fn}
 }
 
 // File returns a NamedValidator that ensures the given file flags exist. Both
 // command-local and global flags are checked.
 func File(flagNames ...string) NamedValidator {
-    return NamedValidator{Name: "file_exists", Fn: FileExists(flagNames...)}
+	return NamedValidator{Name: "file_exists", Fn: FileExists(flagNames...)}
 }
 
 // Dir returns a NamedValidator that ensures the given directory flags exist.
 // Both command-local and global flags are checked.
 func Dir(flagNames ...string) NamedValidator {
-    return NamedValidator{Name: "directory_exists", Fn: DirectoryExists(flagNames...)}
+	return NamedValidator{Name: "directory_exists", Fn: DirectoryExists(flagNames...)}
 }
 
 // Validate composes a set of NamedValidators into a single Middleware.
 //
 // Example:
-//  app.Use(middleware.Validate(
-//      middleware.Custom("port_range", checkPort),
-//      middleware.File("config"),
-//  ))
+//
+//	app.Use(middleware.Validate(
+//	    middleware.Custom("port_range", checkPort),
+//	    middleware.File("config"),
+//	))
 func Validate(validators ...NamedValidator) Middleware {
-    m := make(map[string]ValidatorFunc, len(validators))
-    for _, v := range validators {
-        if v.Name == "" || v.Fn == nil { continue }
-        m[v.Name] = v.Fn
-    }
-    return ValidatorWithCustom(m)
+	m := make(map[string]ValidatorFunc, len(validators))
+	for _, v := range validators {
+		if v.Name == "" || v.Fn == nil {
+			continue
+		}
+		m[v.Name] = v.Fn
+	}
+	return ValidatorWithCustom(m)
 }
 
 // ConditionalRequired creates a validator that makes flags required based on conditions
@@ -154,63 +160,61 @@ func ConditionalRequired(condition ValidatorFunc, requiredFlags ...string) Valid
 
 // FileExists creates a validator that ensures file flags point to existing files
 func FileExists(flagNames ...string) ValidatorFunc {
-    return func(ctx Context) error {
-        for _, flagName := range flagNames {
-            // Check local then global scope
-            var (
-                path   string
-                exists bool
-            )
-            if path, exists = ctx.String(flagName); !exists || path == "" {
-                if g, ok := ctx.GlobalString(flagName); ok && g != "" {
-                    path, exists = g, true
-                }
-            }
-            if exists && path != "" {
-                if err := validateFileExists(path); err != nil {
-                    return &ValidationError{
-                        Field:   flagName,
-                        Value:   path,
-                        Message: fmt.Sprintf("file validation failed for flag '%s'", flagName),
-                        Cause:   err,
-                    }
-                }
-            }
-        }
-        return nil
-    }
+	return func(ctx Context) error {
+		for _, flagName := range flagNames {
+			// Check local then global scope
+			var (
+				path   string
+				exists bool
+			)
+			if path, exists = ctx.String(flagName); !exists || path == "" {
+				if g, ok := ctx.GlobalString(flagName); ok && g != "" {
+					path, exists = g, true
+				}
+			}
+			if exists && path != "" {
+				if err := validateFileExists(path); err != nil {
+					return &ValidationError{
+						Field:   flagName,
+						Value:   path,
+						Message: fmt.Sprintf("file validation failed for flag '%s'", flagName),
+						Cause:   err,
+					}
+				}
+			}
+		}
+		return nil
+	}
 }
 
 // DirectoryExists creates a validator that ensures directory flags point to existing directories
 func DirectoryExists(flagNames ...string) ValidatorFunc {
-    return func(ctx Context) error {
-        for _, flagName := range flagNames {
-            // Check local then global scope
-            var (
-                path   string
-                exists bool
-            )
-            if path, exists = ctx.String(flagName); !exists || path == "" {
-                if g, ok := ctx.GlobalString(flagName); ok && g != "" {
-                    path, exists = g, true
-                }
-            }
-            if exists && path != "" {
-                if err := validateDirectoryExists(path); err != nil {
-                    return &ValidationError{
-                        Field:   flagName,
-                        Value:   path,
-                        Message: fmt.Sprintf("directory validation failed for flag '%s'", flagName),
-                        Cause:   err,
-                    }
-                }
-            }
-        }
-        return nil
-    }
+	return func(ctx Context) error {
+		for _, flagName := range flagNames {
+			// Check local then global scope
+			var (
+				path   string
+				exists bool
+			)
+			if path, exists = ctx.String(flagName); !exists || path == "" {
+				if g, ok := ctx.GlobalString(flagName); ok && g != "" {
+					path, exists = g, true
+				}
+			}
+			if exists && path != "" {
+				if err := validateDirectoryExists(path); err != nil {
+					return &ValidationError{
+						Field:   flagName,
+						Value:   path,
+						Message: fmt.Sprintf("directory validation failed for flag '%s'", flagName),
+						Cause:   err,
+					}
+				}
+			}
+		}
+		return nil
+	}
 }
-
-
 
 // Helper functions
 
@@ -261,26 +265,26 @@ func checkFlagPresence(ctx Context, flagName string) bool {
 
 // validateFileExists checks if a file exists
 func validateFileExists(path string) error {
-    info, err := os.Stat(path)
-    if err != nil {
-        return err
-    }
-    if info.IsDir() {
-        return fmt.Errorf("%s is a directory", path)
-    }
-    return nil
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		return fmt.Errorf("%s is a directory", path)
+	}
+	return nil
 }
 
 // validateDirectoryExists checks if a directory exists
 func validateDirectoryExists(path string) error {
-    info, err := os.Stat(path)
-    if err != nil {
-        return err
-    }
-    if !info.IsDir() {
-        return fmt.Errorf("%s is not a directory", path)
-    }
-    return nil
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s is not a directory", path)
+	}
+	return nil
 }
 
 // Convenience constructors

@@ -1,7 +1,9 @@
+//nolint:testpackage // using package name 'snap' to access unexported fields for testing
 package snap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -70,11 +72,13 @@ func TestComprehensiveFlagTypes(t *testing.T) {
 		t.Errorf("Expected ratio=3.14, got %v", ratio)
 	}
 
-	if tags, ok := result.GetStringSlice("tags"); !ok || len(tags) != 3 || tags[0] != "cli" || tags[1] != "parser" || tags[2] != "go" {
+	if tags, ok := result.GetStringSlice("tags"); !ok || len(tags) != 3 || tags[0] != "cli" || tags[1] != "parser" ||
+		tags[2] != "go" {
 		t.Errorf("Expected tags=[cli,parser,go], got %v", tags)
 	}
 
-	if ports, ok := result.GetIntSlice("ports"); !ok || len(ports) != 3 || ports[0] != 80 || ports[1] != 443 || ports[2] != 8080 {
+	if ports, ok := result.GetIntSlice("ports"); !ok || len(ports) != 3 || ports[0] != 80 || ports[1] != 443 ||
+		ports[2] != 8080 {
 		t.Errorf("Expected ports=[80,443,8080], got %v", ports)
 	}
 
@@ -118,7 +122,8 @@ func TestEnumFlag(t *testing.T) {
 		t.Fatal("Expected error for invalid enum value")
 	}
 
-	if parseErr, ok := err.(*ParseError); ok {
+	parseErr := &ParseError{}
+	if errors.As(err, &parseErr) {
 		if parseErr.Type != ErrorTypeInvalidValue {
 			t.Errorf("Expected ErrorTypeInvalidValue, got %v", parseErr.Type)
 		}
@@ -381,7 +386,8 @@ func TestFlagGroupValidation(t *testing.T) {
 		t.Error("Expected error for mutually exclusive flags, got none")
 	}
 
-	if parseErr, ok := err.(*ParseError); ok {
+	parseErr := &ParseError{}
+	if errors.As(err, &parseErr) {
 		if parseErr.Type != ErrorTypeFlagGroupViolation {
 			t.Errorf("Expected ErrorTypeFlagGroupViolation, got %v", parseErr.Type)
 		}
@@ -415,7 +421,8 @@ func TestSmartErrorHandling(t *testing.T) {
 		t.Error("Expected error for unknown flag, got none")
 	}
 
-	if parseErr, ok := err.(*ParseError); ok {
+	parseErr := &ParseError{}
+	if errors.As(err, &parseErr) {
 		if parseErr.Type != ErrorTypeUnknownFlag {
 			t.Errorf("Expected ErrorTypeUnknownFlag, got %v", parseErr.Type)
 		}
@@ -565,9 +572,11 @@ func TestExitCodes_Minimal(t *testing.T) {
 func captureStderr(fn func()) string {
 	old := os.Stderr
 	r, w, _ := os.Pipe()
+	//nolint:reassign // intentionally redirect os.Stderr in tests to capture output
 	os.Stderr = w
 	fn()
 	w.Close()
+	//nolint:reassign // intentionally redirect os.Stderr in tests to capture output
 	os.Stderr = old
 	var sb strings.Builder
 	buf := make([]byte, 4096)
@@ -598,7 +607,8 @@ func TestErrorDisplay_GroupViolation_ShowsGroupHelp(t *testing.T) {
 		_, err := p.Parse([]string{"--json", "--yaml"})
 		if err != nil {
 			// send through app's handler to display group context
-			if pe, ok := err.(*ParseError); ok {
+			pe := &ParseError{}
+			if errors.As(err, &pe) {
 				_ = app.handleParseError(pe)
 			} else {
 				t.Fatalf("unexpected error type: %T", err)
@@ -617,14 +627,14 @@ func TestHelpAndVersionAcrossContexts(t *testing.T) {
 	app := New("tool", "desc").Version("1.0.0")
 	sub := app.Command("serve", "serves").Build()
 	// top-level --help
-	if err := app.RunWithArgs(context.Background(), []string{"--help"}); err != ErrHelpShown {
+	if err := app.RunWithArgs(context.Background(), []string{"--help"}); !errors.Is(err, ErrHelpShown) {
 		t.Fatalf("expected ErrHelpShown, got %v", err)
 	}
 	// subcommand --help
 	p := NewParser(app)
 	res, _ := p.Parse([]string{"serve", "--help"})
 	app.currentResult = res
-	if err := app.RunWithArgs(context.Background(), []string{"serve", "--help"}); err != ErrHelpShown {
+	if err := app.RunWithArgs(context.Background(), []string{"serve", "--help"}); !errors.Is(err, ErrHelpShown) {
 		t.Fatalf("expected ErrHelpShown for subcommand, got %v", err)
 	}
 	_ = sub // silence
@@ -642,7 +652,8 @@ func TestSubcommandSuggestionPrefersChild(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error")
 	}
-	if pe, ok := err.(*ParseError); ok {
+	pe := &ParseError{}
+	if errors.As(err, &pe) {
 		if pe.Suggestion != "status" {
 			t.Fatalf("expected suggestion 'status', got %q", pe.Suggestion)
 		}
@@ -703,7 +714,7 @@ func TestConfig_EnumAndSlices_Collected(t *testing.T) {
 	type C struct {
 		Names []string `flag:"names"`
 		Ports []int    `flag:"ports"`
-		Mode  string   `flag:"mode" enum:"red,blue,green"`
+		Mode  string   `flag:"mode"  enum:"red,blue,green"`
 	}
 	var cfg C
 	app, err := Config("app", "").FromFlags().Bind(&cfg).Build()
@@ -716,8 +727,8 @@ func TestConfig_EnumAndSlices_Collected(t *testing.T) {
 		t.Fatalf("parse: %v", err)
 	}
 	app.currentResult = res
-	if err := app.populateConfiguration(); err != nil {
-		t.Fatalf("populate: %v", err)
+	if pErr := app.populateConfiguration(); pErr != nil {
+		t.Fatalf("populate: %v", pErr)
 	}
 	if cfg.Mode != "green" || len(cfg.Names) != 2 || cfg.Names[0] != "a" || cfg.Ports[0] != 10 {
 		t.Fatalf("bad config: %#v", cfg)

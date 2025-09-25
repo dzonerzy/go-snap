@@ -13,95 +13,95 @@ import (
 // Context describes the runtime information and lifecycle controls that
 // middleware can rely on. It is implemented by *snap.Context.
 type Context interface {
-    // Core methods needed by middleware
+	// Core methods needed by middleware
 
-    // Done returns a channel that is closed when the command's context is
-    // canceled or times out. Use this to abort long‑running work.
-    Done() <-chan struct{}
+	// Done returns a channel that is closed when the command's context is
+	// canceled or times out. Use this to abort long‑running work.
+	Done() <-chan struct{}
 
-    // Cancel requests cancellation of the current command's context. It is
-    // idempotent and safe to call from middleware to stop downstream work.
-    Cancel()
+	// Cancel requests cancellation of the current command's context. It is
+	// idempotent and safe to call from middleware to stop downstream work.
+	Cancel()
 
-    // Args returns the positional (non‑flag) arguments for the current
-    // command. The returned slice should be treated as read‑only.
-    Args() []string
+	// Args returns the positional (non‑flag) arguments for the current
+	// command. The returned slice should be treated as read‑only.
+	Args() []string
 
-    // Set stores a key/value pair in the context metadata. This is useful for
-    // passing information between middleware. Keys should be namespaced to
-    // avoid collisions (e.g., "logger.request_id").
-    Set(key string, value any)
+	// Set stores a key/value pair in the context metadata. This is useful for
+	// passing information between middleware. Keys should be namespaced to
+	// avoid collisions (e.g., "logger.request_id").
+	Set(key string, value any)
 
-    // Get retrieves a value previously stored via Set. It returns nil when no
-    // value is present for the given key.
-    Get(key string) any
+	// Get retrieves a value previously stored via Set. It returns nil when no
+	// value is present for the given key.
+	Get(key string) any
 
-    // Flag access methods that exist in snap.Context
+	// Flag access methods that exist in snap.Context
 
-    // String returns the string value of a flag and a boolean indicating
-    // presence. Presence is true when the flag was set by CLI/env/defaults.
-    String(name string) (string, bool)
+	// String returns the string value of a flag and a boolean indicating
+	// presence. Presence is true when the flag was set by CLI/env/defaults.
+	String(name string) (string, bool)
 
-    // Int returns the int value of a flag and whether it is present.
-    Int(name string) (int, bool)
+	// Int returns the int value of a flag and whether it is present.
+	Int(name string) (int, bool)
 
-    // Bool returns the bool value of a flag and whether it is present. For
-    // boolean flags, presence typically implies a value of true unless set via
-    // explicit false.
-    Bool(name string) (bool, bool)
+	// Bool returns the bool value of a flag and whether it is present. For
+	// boolean flags, presence typically implies a value of true unless set via
+	// explicit false.
+	Bool(name string) (bool, bool)
 
-    // Duration returns the time.Duration value of a flag and whether it is
-    // present. Supports extended duration formats handled by the parser.
-    Duration(name string) (time.Duration, bool)
+	// Duration returns the time.Duration value of a flag and whether it is
+	// present. Supports extended duration formats handled by the parser.
+	Duration(name string) (time.Duration, bool)
 
-    // Float returns the float64 value of a flag and whether it is present.
-    Float(name string) (float64, bool)
+	// Float returns the float64 value of a flag and whether it is present.
+	Float(name string) (float64, bool)
 
-    // Enum returns the selected enum value (string) and whether it is present.
-    Enum(name string) (string, bool)
+	// Enum returns the selected enum value (string) and whether it is present.
+	Enum(name string) (string, bool)
 
-    // StringSlice returns the []string value of a slice flag and whether it is
-    // present. The returned slice should be treated as read‑only.
-    StringSlice(name string) ([]string, bool)
+	// StringSlice returns the []string value of a slice flag and whether it is
+	// present. The returned slice should be treated as read‑only.
+	StringSlice(name string) ([]string, bool)
 
-    // IntSlice returns the []int value of a slice flag and whether it is
-    // present. The returned slice should be treated as read‑only.
-    IntSlice(name string) ([]int, bool)
+	// IntSlice returns the []int value of a slice flag and whether it is
+	// present. The returned slice should be treated as read‑only.
+	IntSlice(name string) ([]int, bool)
 
-    // Global flag access
+	// Global flag access
 
-    // GlobalString returns the string value of a global flag and presence.
-    GlobalString(name string) (string, bool)
+	// GlobalString returns the string value of a global flag and presence.
+	GlobalString(name string) (string, bool)
 
-    // GlobalInt returns the int value of a global flag and presence.
-    GlobalInt(name string) (int, bool)
+	// GlobalInt returns the int value of a global flag and presence.
+	GlobalInt(name string) (int, bool)
 
-    // GlobalBool returns the bool value of a global flag and presence.
-    GlobalBool(name string) (bool, bool)
+	// GlobalBool returns the bool value of a global flag and presence.
+	GlobalBool(name string) (bool, bool)
 
-    // GlobalDuration returns the time.Duration value of a global flag and
-    // presence.
-    GlobalDuration(name string) (time.Duration, bool)
+	// GlobalDuration returns the time.Duration value of a global flag and
+	// presence.
+	GlobalDuration(name string) (time.Duration, bool)
 
-    // GlobalFloat returns the float64 value of a global flag and presence.
-    GlobalFloat(name string) (float64, bool)
+	// GlobalFloat returns the float64 value of a global flag and presence.
+	GlobalFloat(name string) (float64, bool)
 
-    // GlobalEnum returns the enum string value of a global flag and presence.
-    GlobalEnum(name string) (string, bool)
+	// GlobalEnum returns the enum string value of a global flag and presence.
+	GlobalEnum(name string) (string, bool)
 
-    // GlobalStringSlice returns the []string value of a global slice flag and
-    // presence. The returned slice should be treated as read‑only.
-    GlobalStringSlice(name string) ([]string, bool)
+	// GlobalStringSlice returns the []string value of a global slice flag and
+	// presence. The returned slice should be treated as read‑only.
+	GlobalStringSlice(name string) ([]string, bool)
 
-    // GlobalIntSlice returns the []int value of a global slice flag and
-    // presence. The returned slice should be treated as read‑only.
-    GlobalIntSlice(name string) ([]int, bool)
+	// GlobalIntSlice returns the []int value of a global slice flag and
+	// presence. The returned slice should be treated as read‑only.
+	GlobalIntSlice(name string) ([]int, bool)
 
-    // Command access
+	// Command access
 
-    // Command returns the current command descriptor (name/description). It
-    // can be used by middleware for logging and error messages.
-    Command() Command
+	// Command returns the current command descriptor (name/description). It
+	// can be used by middleware for logging and error messages.
+	Command() Command
 }
 
 // Command interface will be satisfied by *snap.Command
@@ -117,6 +117,8 @@ type ActionFunc func(ctx Context) error
 type Middleware func(next ActionFunc) ActionFunc
 
 // MiddlewareChain represents a chain of middleware functions
+//
+//nolint:revive // keep exported name for backwards compatibility; constructor is Chain(...)
 type MiddlewareChain []Middleware
 
 // Apply applies the middleware chain to an ActionFunc. Middleware are wrapped
@@ -130,13 +132,13 @@ func (chain MiddlewareChain) Apply(action ActionFunc) ActionFunc {
 
 // Use returns a new chain with the provided middleware appended.
 func (chain MiddlewareChain) Use(middleware ...Middleware) MiddlewareChain {
-    return append(chain, middleware...)
+	return append(chain, middleware...)
 }
 
 // Chain creates a new middleware chain from the provided middleware, preserving
 // order.
 func Chain(middleware ...Middleware) MiddlewareChain {
-    return MiddlewareChain(middleware)
+	return MiddlewareChain(middleware)
 }
 
 // Error types for middleware
@@ -180,6 +182,8 @@ func (e *RecoveryError) Error() string {
 // Configuration types
 
 // MiddlewareConfig contains configuration for middleware behavior
+//
+//nolint:revive // exported type intentionally retains package prefix for clarity and stability
 type MiddlewareConfig struct {
 	LogLevel         LogLevel
 	LogOutput        LogOutput
@@ -231,6 +235,7 @@ type RequestInfo struct {
 
 // Configuration options
 
+//nolint:revive // exported type intentionally retains package prefix for clarity and stability
 type MiddlewareOption func(config *MiddlewareConfig)
 
 func DefaultConfig() *MiddlewareConfig {

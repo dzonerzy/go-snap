@@ -7,8 +7,8 @@ import (
 	"github.com/dzonerzy/go-snap/internal/fuzzy"
 )
 
-// Error types for CLI operations. These categories drive suggestion logic and
-// exit-code mapping (via ExitCodeManager).
+// ErrorType represents error categories for CLI operations.
+// These categories drive suggestion logic and exit-code mapping (via ExitCodeManager).
 type ErrorType string
 
 const (
@@ -46,7 +46,7 @@ func NewParseError(errType ErrorType, message string) *ParseError {
 	}
 }
 
-// Enhanced error types with smart suggestions (from SPECS.md)
+// CLIError is an enhanced error type with smart suggestions (see SPECS.md).
 type CLIError struct {
 	Type        ErrorType
 	Message     string
@@ -90,7 +90,7 @@ func (e *CLIError) WithContext(key string, value any) *CLIError {
 	return e
 }
 
-// Smart error handling with fuzzy matching suggestions
+// ErrorHandler provides smart error handling with fuzzy matching suggestions.
 type ErrorHandler struct {
 	suggestCommands bool
 	suggestFlags    bool
@@ -140,7 +140,7 @@ func (eh *ErrorHandler) ProcessError(err *CLIError, app *App) *CLIError {
 	}
 
 	// Add smart suggestions based on error type
-	switch err.Type {
+	switch err.Type { // exhaustive over ErrorType
 	case ErrorTypeUnknownFlag:
 		if eh.suggestFlags {
 			eh.addFlagSuggestions(err, app)
@@ -152,6 +152,9 @@ func (eh *ErrorHandler) ProcessError(err *CLIError, app *App) *CLIError {
 	case ErrorTypeFlagGroupViolation:
 		// Flag group errors get contextual help
 		eh.addGroupContext(err, app)
+	case ErrorTypeInvalidFlag, ErrorTypeInvalidValue, ErrorTypeMissingValue,
+		ErrorTypeInternal, ErrorTypeMissingRequired, ErrorTypePermission, ErrorTypeValidation:
+		// No suggestions for these by default.
 	}
 
 	return err
@@ -160,10 +163,10 @@ func (eh *ErrorHandler) ProcessError(err *CLIError, app *App) *CLIError {
 // addFlagSuggestions adds fuzzy-matched flag suggestions using internal/fuzzy.
 func (eh *ErrorHandler) addFlagSuggestions(err *CLIError, app *App) {
 	if flagName, ok := err.Context["flag"].(string); ok {
-    	// Find similar flag names using fuzzy matching
+		// Find similar flag names using fuzzy matching
 		bestMatch := eh.findBestFlagMatch(flagName, app)
 		if bestMatch != "" {
-			err.WithSuggestion(fmt.Sprintf("Did you mean '--%s'?", bestMatch))
+			_ = err.WithSuggestion(fmt.Sprintf("Did you mean '--%s'?", bestMatch))
 		}
 	}
 }
@@ -174,7 +177,7 @@ func (eh *ErrorHandler) addCommandSuggestions(err *CLIError, app *App) {
 		// Find similar command names
 		bestMatch := eh.findBestCommandMatch(cmdName, app)
 		if bestMatch != "" {
-			err.WithSuggestion(fmt.Sprintf("Did you mean '%s'?", bestMatch))
+			_ = err.WithSuggestion(fmt.Sprintf("Did you mean '%s'?", bestMatch))
 		}
 	}
 }
@@ -183,8 +186,12 @@ func (eh *ErrorHandler) addCommandSuggestions(err *CLIError, app *App) {
 func (eh *ErrorHandler) addGroupContext(err *CLIError, app *App) {
 	// This will be enhanced when we integrate with help system
 	if groupName, ok := err.Context["group"].(string); ok {
-		err.WithSuggestion(fmt.Sprintf("Run '%s --help' to see valid flag combinations for group '%s'",
-			app.name, groupName))
+		_ = err.WithSuggestion(
+			fmt.Sprintf(
+				"Run '%s --help' to see valid flag combinations for group '%s'",
+				app.name, groupName,
+			),
+		)
 	}
 }
 
@@ -228,42 +235,42 @@ func (eh *ErrorHandler) DisplayError(err *CLIError, app *App) {
 
 // showFlagGroupHelp displays help for a specific flag group
 func (eh *ErrorHandler) showFlagGroupHelp(groupName string, app *App) {
-    for _, group := range app.flagGroups {
-        if group.Name == groupName {
-            fmt.Fprintf(os.Stderr, "Flag group '%s':\n", groupName)
-            if group.Description != "" {
-                fmt.Fprintf(os.Stderr, "  %s\n", group.Description)
-            }
+	for _, group := range app.flagGroups {
+		if group.Name == groupName {
+			fmt.Fprintf(os.Stderr, "Flag group '%s':\n", groupName)
+			if group.Description != "" {
+				fmt.Fprintf(os.Stderr, "  %s\n", group.Description)
+			}
 
 			for _, flag := range group.Flags {
 				fmt.Fprintf(os.Stderr, "  --%s    %s\n", flag.Name, flag.Description)
 			}
 
-            fmt.Fprintf(os.Stderr, "\nConstraint: %s\n", eh.formatConstraint(group.Constraint))
-            break
-        }
-    }
-    // Also check current command's groups if not found at app level
-    if app.currentResult != nil && app.currentResult.Command != nil {
-        for _, group := range app.currentResult.Command.flagGroups {
-            if group.Name == groupName {
-                fmt.Fprintf(os.Stderr, "Flag group '%s':\n", groupName)
-                if group.Description != "" {
-                    fmt.Fprintf(os.Stderr, "  %s\n", group.Description)
-                }
-                for _, flag := range group.Flags {
-                    fmt.Fprintf(os.Stderr, "  --%s    %s\n", flag.Name, flag.Description)
-                }
-                fmt.Fprintf(os.Stderr, "\nConstraint: %s\n", eh.formatConstraint(group.Constraint))
-                break
-            }
-        }
-    }
+			fmt.Fprintf(os.Stderr, "\nConstraint: %s\n", eh.formatConstraint(group.Constraint))
+			break
+		}
+	}
+	// Also check current command's groups if not found at app level
+	if app.currentResult != nil && app.currentResult.Command != nil {
+		for _, group := range app.currentResult.Command.flagGroups {
+			if group.Name == groupName {
+				fmt.Fprintf(os.Stderr, "Flag group '%s':\n", groupName)
+				if group.Description != "" {
+					fmt.Fprintf(os.Stderr, "  %s\n", group.Description)
+				}
+				for _, flag := range group.Flags {
+					fmt.Fprintf(os.Stderr, "  --%s    %s\n", flag.Name, flag.Description)
+				}
+				fmt.Fprintf(os.Stderr, "\nConstraint: %s\n", eh.formatConstraint(group.Constraint))
+				break
+			}
+		}
+	}
 }
 
 // formatConstraint returns a human-readable description of the constraint
 func (eh *ErrorHandler) formatConstraint(constraint GroupConstraintType) string {
-	switch constraint {
+	switch constraint { // exhaustive over GroupConstraintType
 	case GroupMutuallyExclusive:
 		return "Only one of these flags can be used at a time"
 	case GroupRequiredGroup:
@@ -272,6 +279,10 @@ func (eh *ErrorHandler) formatConstraint(constraint GroupConstraintType) string 
 		return "Either all of these flags must be provided, or none"
 	case GroupExactlyOne:
 		return "Exactly one of these flags must be provided"
+	case GroupNoConstraint:
+		return ""
+	case GroupAtLeastOne:
+		return "At least one of these flags is required"
 	default:
 		return ""
 	}

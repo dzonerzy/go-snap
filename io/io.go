@@ -34,20 +34,34 @@ func New() *IOManager {
 	return m
 }
 
-// Fluent setters
-func (m *IOManager) WithIn(r stdio.Reader) *IOManager  { m.in = r; return m }
-func (m *IOManager) WithOut(w stdio.Writer) *IOManager { m.out = w; return m }
-func (m *IOManager) WithErr(w stdio.Writer) *IOManager { m.err = w; return m }
-func (m *IOManager) ForceColor() *IOManager            { m.forceColor = true; m.noColor = false; return m }
-func (m *IOManager) NoColor() *IOManager               { m.noColor = true; m.forceColor = false; return m }
-func (m *IOManager) ColorAuto() *IOManager             { m.noColor = false; m.forceColor = false; return m }
+// WithIn sets the input reader used by the manager and returns the manager for chaining.
+func (m *IOManager) WithIn(r stdio.Reader) *IOManager { m.in = r; return m }
 
-// Accessors
-func (m *IOManager) In() stdio.Reader  { return m.in }
+// WithOut sets the standard output writer and returns the manager for chaining.
+func (m *IOManager) WithOut(w stdio.Writer) *IOManager { m.out = w; return m }
+
+// WithErr sets the standard error writer and returns the manager for chaining.
+func (m *IOManager) WithErr(w stdio.Writer) *IOManager { m.err = w; return m }
+
+// ForceColor forces color output on, regardless of environment.
+func (m *IOManager) ForceColor() *IOManager { m.forceColor = true; m.noColor = false; return m }
+
+// NoColor disables color output, regardless of environment.
+func (m *IOManager) NoColor() *IOManager { m.noColor = true; m.forceColor = false; return m }
+
+// ColorAuto uses environment heuristics to determine color support.
+func (m *IOManager) ColorAuto() *IOManager { m.noColor = false; m.forceColor = false; return m }
+
+// In returns the configured input reader.
+func (m *IOManager) In() stdio.Reader { return m.in }
+
+// Out returns the configured standard output writer.
 func (m *IOManager) Out() stdio.Writer { return m.out }
+
+// Err returns the configured standard error writer.
 func (m *IOManager) Err() stdio.Writer { return m.err }
 
-// Capabilities
+// IsTTY reports whether stdout is connected to a terminal.
 func (m *IOManager) IsTTY() bool         { return m.p.isTerminal(os.Stdout) }
 func (m *IOManager) IsInteractive() bool { return m.p.isTerminal(os.Stdin) && os.Getenv("CI") == "" }
 func (m *IOManager) Width() int {
@@ -90,7 +104,7 @@ func (m *IOManager) SupportsColor() bool {
 	return term != "" && term != "dumb"
 }
 
-// ColorLevel: 0 none, 1 basic, 2 256, 3 truecolor
+// ColorLevel returns 0 for none, 1 for basic, 2 for 256 colors, and 3 for truecolor.
 func (m *IOManager) ColorLevel() int {
 	if !m.SupportsColor() {
 		return 0
@@ -111,20 +125,25 @@ func (m *IOManager) ColorLevel() int {
 func (m *IOManager) EnableVirtualTerminal() bool { return m.p.enableVirtualTerminal() }
 
 // ANSI helpers
+
 // Colorize wraps s with the given ANSI SGR code (e.g., "31" for red) and a
 // trailing reset ("0m"). If color is not supported, it returns s unchanged.
 func (m *IOManager) Colorize(s, code string) string {
-    if !m.SupportsColor() {
-        return s
-    }
-    return "\x1b[" + code + "m" + s + "\x1b[0m"
+	if !m.SupportsColor() {
+		return s
+	}
+	return "\x1b[" + code + "m" + s + "\x1b[0m"
 }
+
 // Bold returns s in bold when color is supported; otherwise s unchanged.
-func (m *IOManager) Bold(s string) string      { return m.Colorize(s, "1") }
+func (m *IOManager) Bold(s string) string { return m.Colorize(s, "1") }
+
 // Faint returns s in faint intensity when supported; otherwise s unchanged.
-func (m *IOManager) Faint(s string) string     { return m.Colorize(s, "2") }
+func (m *IOManager) Faint(s string) string { return m.Colorize(s, "2") }
+
 // Italic returns s in italic when supported; otherwise s unchanged.
-func (m *IOManager) Italic(s string) string    { return m.Colorize(s, "3") }
+func (m *IOManager) Italic(s string) string { return m.Colorize(s, "3") }
+
 // Underline returns s underlined when supported; otherwise s unchanged.
 func (m *IOManager) Underline(s string) string { return m.Colorize(s, "4") }
 

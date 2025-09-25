@@ -1,3 +1,4 @@
+//nolint:testpackage // using package name 'intern' to access unexported fields for testing
 package intern
 
 import (

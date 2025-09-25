@@ -1,6 +1,7 @@
 package snap
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -50,7 +51,7 @@ func (pm *PrecedenceManager) AddSource(sourceType SourceType, data map[string]an
 // Resolve resolves configuration with proper precedence
 // Returns the final configuration map with highest priority values
 func (pm *PrecedenceManager) Resolve() map[string]any {
-    result := make(map[string]any)
+	result := make(map[string]any)
 
 	// Process sources in priority order (lowest to highest)
 	// This ensures higher priority sources override lower priority ones
@@ -62,25 +63,25 @@ func (pm *PrecedenceManager) Resolve() map[string]any {
 		}
 	}
 
-    // Flatten nested maps to dotted keys so schema lookups match struct fields
-    flat := make(map[string]any)
-    flattenMap("", result, flat)
-    return flat
+	// Flatten nested maps to dotted keys so schema lookups match struct fields
+	flat := make(map[string]any)
+	flattenMap("", result, flat)
+	return flat
 }
 
 // flattenMap converts nested maps to dotted keys (e.g., {"a":{"b":1}} => {"a.b":1})
 func flattenMap(prefix string, src map[string]any, dst map[string]any) {
-    for k, v := range src {
-        key := k
-        if prefix != "" {
-            key = prefix + "." + k
-        }
-        if sub, ok := v.(map[string]any); ok {
-            flattenMap(key, sub, dst)
-            continue
-        }
-        dst[key] = v
-    }
+	for k, v := range src {
+		key := k
+		if prefix != "" {
+			key = prefix + "." + k
+		}
+		if sub, ok := v.(map[string]any); ok {
+			flattenMap(key, sub, dst)
+			continue
+		}
+		dst[key] = v
+	}
 }
 
 // mergeWithPrecedence merges source data into result with precedence rules
@@ -89,7 +90,7 @@ func (pm *PrecedenceManager) mergeWithPrecedence(result, source map[string]any) 
 		// Handle nested objects
 		if existingValue, exists := result[key]; exists {
 			if existingMap, ok := existingValue.(map[string]any); ok {
-				if sourceMap, ok := value.(map[string]any); ok {
+				if sourceMap, ok2 := value.(map[string]any); ok2 {
 					// Recursively merge nested maps
 					pm.mergeWithPrecedence(existingMap, sourceMap)
 					continue
@@ -150,6 +151,7 @@ func (pm *PrecedenceManager) applySchemaDefaults(config map[string]any, schema *
 		}
 
 		// Validate enum values
+		//nolint:nestif // Enum validation requires nested checks to provide precise messages.
 		if len(fieldSchema.EnumValues) > 0 {
 			if value, exists := config[fieldName]; exists {
 				valueStr := fmt.Sprintf("%v", value)
@@ -181,7 +183,9 @@ func (pm *PrecedenceManager) convertValueToType(value any, targetType reflect.Ty
 
 	// Handle string conversions (common from JSON/env vars)
 	if valueReflect.Kind() == reflect.String {
-		return pm.convertStringToType(value.(string), targetType)
+		// Use reflect to safely read string (supports named string types)
+		s := valueReflect.String()
+		return pm.convertStringToType(s, targetType)
 	}
 
 	// Handle numeric conversions
@@ -194,7 +198,7 @@ func (pm *PrecedenceManager) convertValueToType(value any, targetType reflect.Ty
 
 // convertStringToType converts string values to specific types
 func (pm *PrecedenceManager) convertStringToType(str string, targetType reflect.Type) (any, error) {
-	switch targetType.Kind() {
+	switch targetType.Kind() { //nolint:exhaustive // only handle supported conversion targets
 	case reflect.String:
 		return str, nil
 
@@ -205,25 +209,25 @@ func (pm *PrecedenceManager) convertStringToType(str string, targetType reflect.
 		return strconv.Atoi(str)
 
 	case reflect.Int8:
-		if val, err := strconv.ParseInt(str, 10, 8); err != nil {
+		val, err := strconv.ParseInt(str, 10, 8)
+		if err != nil {
 			return nil, err
-		} else {
-			return int8(val), nil
 		}
+		return int8(val), nil
 
 	case reflect.Int16:
-		if val, err := strconv.ParseInt(str, 10, 16); err != nil {
+		val, err := strconv.ParseInt(str, 10, 16)
+		if err != nil {
 			return nil, err
-		} else {
-			return int16(val), nil
 		}
+		return int16(val), nil
 
 	case reflect.Int32:
-		if val, err := strconv.ParseInt(str, 10, 32); err != nil {
+		val, err := strconv.ParseInt(str, 10, 32)
+		if err != nil {
 			return nil, err
-		} else {
-			return int32(val), nil
 		}
+		return int32(val), nil
 
 	case reflect.Int64:
 		if targetType == reflect.TypeOf(time.Duration(0)) {
@@ -232,18 +236,18 @@ func (pm *PrecedenceManager) convertStringToType(str string, targetType reflect.
 		return strconv.ParseInt(str, 10, 64)
 
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		if val, err := strconv.ParseUint(str, 10, int(targetType.Size()*8)); err != nil {
+		val, err := strconv.ParseUint(str, 10, int(targetType.Size()*8))
+		if err != nil {
 			return nil, err
-		} else {
-			return reflect.ValueOf(val).Convert(targetType).Interface(), nil
 		}
+		return reflect.ValueOf(val).Convert(targetType).Interface(), nil
 
 	case reflect.Float32:
-		if val, err := strconv.ParseFloat(str, 32); err != nil {
+		val, err := strconv.ParseFloat(str, 32)
+		if err != nil {
 			return nil, err
-		} else {
-			return float32(val), nil
 		}
+		return float32(val), nil
 
 	case reflect.Float64:
 		return strconv.ParseFloat(str, 64)
@@ -315,7 +319,7 @@ func (pm *PrecedenceManager) sourceTypeName(sourceType SourceType) string {
 // Supports: "MM:SS", "HH:MM:SS", "1d", "1w", "1M", "1Y", "1h30m15s"
 func (pm *PrecedenceManager) parseDurationString(s string) (time.Duration, error) {
 	if s == "" {
-		return 0, fmt.Errorf("empty duration")
+		return 0, errors.New("empty duration")
 	}
 
 	// 1. Check for colon format: "MM:SS" or "HH:MM:SS"
@@ -336,6 +340,7 @@ func (pm *PrecedenceManager) parseDurationString(s string) (time.Duration, error
 func (pm *PrecedenceManager) parseColonDurationString(s string) (time.Duration, error) {
 	parts := strings.Split(s, ":")
 
+	//nolint:nestif // Parsing human-friendly time formats benefits from clear branching.
 	if len(parts) == 2 {
 		// Format: "MM:SS" - minutes:seconds
 		minutes, err := strconv.Atoi(parts[0])
@@ -349,7 +354,6 @@ func (pm *PrecedenceManager) parseColonDurationString(s string) (time.Duration, 
 		}
 
 		return time.Duration(minutes)*time.Minute + time.Duration(seconds)*time.Second, nil
-
 	} else if len(parts) == 3 {
 		// Format: "HH:MM:SS" - hours:minutes:seconds
 		hours, err := strconv.Atoi(parts[0])

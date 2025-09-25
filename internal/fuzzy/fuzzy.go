@@ -89,7 +89,7 @@ func (m *Matcher) calculateScore(input, candidate string, distance int) float64 
 		return 0.0
 	}
 
-	maxLen := max(len(input), len(candidate))
+	maxLen := intMax(len(input), len(candidate))
 	if maxLen == 0 {
 		return 1.0
 	}
@@ -101,7 +101,7 @@ func (m *Matcher) calculateScore(input, candidate string, distance int) float64 
 	prefixBonus := 0.0
 	prefixLen := m.commonPrefixLength(input, candidate)
 	if prefixLen > 0 {
-		prefixBonus = float64(prefixLen) / float64(min(len(input), len(candidate))) * 0.3
+		prefixBonus = float64(prefixLen) / float64(intMin(len(input), len(candidate))) * 0.3
 	}
 
 	// Bonus for length similarity
@@ -162,9 +162,9 @@ func (m *Matcher) levenshteinDistance(a, b string) int {
 			}
 
 			currentRow[j] = minThree(
-				currentRow[j-1]+1,      // insertion
-				previousRow[j]+1,       // deletion
-				previousRow[j-1]+cost,  // substitution
+				currentRow[j-1]+1,     // insertion
+				previousRow[j]+1,      // deletion
+				previousRow[j-1]+cost, // substitution
 			)
 
 			if currentRow[j] < minInRow {
@@ -187,7 +187,7 @@ func (m *Matcher) levenshteinDistance(a, b string) int {
 
 // commonPrefixLength returns the length of the common prefix
 func (m *Matcher) commonPrefixLength(a, b string) int {
-	maxLen := min(len(a), len(b))
+	maxLen := intMin(len(a), len(b))
 	for i := range maxLen {
 		if a[i] != b[i] {
 			return i
@@ -218,14 +218,14 @@ func (m *Matcher) countCommonChars(a, b string) int {
 }
 
 // Helper functions
-func min(a, b int) int {
+func intMin(a, b int) int {
 	if a < b {
 		return a
 	}
 	return b
 }
 
-func max(a, b int) int {
+func intMax(a, b int) int {
 	if a > b {
 		return a
 	}
@@ -271,7 +271,7 @@ func FindSuggestions(input string, candidates []string, maxDistance, maxSuggesti
 	matcher := NewMatcher(maxDistance)
 	matches := matcher.FindMatches(input, candidates)
 
-	suggestions := make([]string, 0, min(len(matches), maxSuggestions))
+	suggestions := make([]string, 0, intMin(len(matches), maxSuggestions))
 	for i, match := range matches {
 		if i >= maxSuggestions {
 			break

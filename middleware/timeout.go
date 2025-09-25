@@ -2,20 +2,21 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
 // Timeout creates a middleware that enforces a timeout on command execution
 func Timeout(duration time.Duration) Middleware {
-    return func(next ActionFunc) ActionFunc {
-        return func(ctx Context) error {
-            // Create a context with timeout derived from the current context when possible
-            parent := context.Background()
-            if c, ok := any(ctx).(interface{ Context() context.Context }); ok {
-                parent = c.Context()
-            }
-            timeoutCtx, cancel := context.WithTimeout(parent, duration)
-            defer cancel()
+	return func(next ActionFunc) ActionFunc {
+		return func(ctx Context) error {
+			// Create a context with timeout derived from the current context when possible
+			parent := context.Background()
+			if c, ok := any(ctx).(interface{ Context() context.Context }); ok {
+				parent = c.Context()
+			}
+			timeoutCtx, cancel := context.WithTimeout(parent, duration)
+			defer cancel()
 
 			// Channel to capture the result of the action
 			resultChan := make(chan error, 1)
@@ -64,17 +65,17 @@ func TimeoutWithDefault(options ...MiddlewareOption) Middleware {
 
 // TimeoutWithGracefulShutdown creates a timeout middleware that attempts graceful shutdown
 func TimeoutWithGracefulShutdown(timeout, gracePeriod time.Duration) Middleware {
-    return func(next ActionFunc) ActionFunc {
-        return func(ctx Context) error {
-            // Create contexts for timeout and grace period derived from parent
-            parent := context.Background()
-            if c, ok := any(ctx).(interface{ Context() context.Context }); ok {
-                parent = c.Context()
-            }
-            timeoutCtx, timeoutCancel := context.WithTimeout(parent, timeout)
-            graceCtx, graceCancel := context.WithTimeout(parent, timeout+gracePeriod)
-            defer timeoutCancel()
-            defer graceCancel()
+	return func(next ActionFunc) ActionFunc {
+		return func(ctx Context) error {
+			// Create contexts for timeout and grace period derived from parent
+			parent := context.Background()
+			if c, ok := any(ctx).(interface{ Context() context.Context }); ok {
+				parent = c.Context()
+			}
+			timeoutCtx, timeoutCancel := context.WithTimeout(parent, timeout)
+			graceCtx, graceCancel := context.WithTimeout(parent, timeout+gracePeriod)
+			defer timeoutCancel()
+			defer graceCancel()
 
 			resultChan := make(chan error, 1)
 			done := make(chan struct{})
@@ -152,14 +153,14 @@ func TimeoutPerCommand(commandTimeouts map[string]time.Duration, defaultTimeout 
 // TimeoutWithCallback creates a timeout middleware that calls onTimeout when the
 // command exceeds duration. The callback runs after the timeout is reached.
 func TimeoutWithCallback(duration time.Duration, onTimeout func(command string, duration time.Duration)) Middleware {
-    return func(next ActionFunc) ActionFunc {
-        return func(ctx Context) error {
-            parent := context.Background()
-            if c, ok := any(ctx).(interface{ Context() context.Context }); ok {
-                parent = c.Context()
-            }
-            timeoutCtx, cancel := context.WithTimeout(parent, duration)
-            defer cancel()
+	return func(next ActionFunc) ActionFunc {
+		return func(ctx Context) error {
+			parent := context.Background()
+			if c, ok := any(ctx).(interface{ Context() context.Context }); ok {
+				parent = c.Context()
+			}
+			timeoutCtx, cancel := context.WithTimeout(parent, duration)
+			defer cancel()
 
 			resultChan := make(chan error, 1)
 
@@ -205,21 +206,30 @@ func TimeoutWithRetry(duration time.Duration, maxRetries int) Middleware {
 			var lastErr error
 
 			for attempt := 0; attempt <= maxRetries; attempt++ {
-				// Apply timeout to this attempt
+				// Apply a per-attempt timeout
 				err := Timeout(duration)(next)(ctx)
 
-				// If not a timeout error, return the result
-				if timeoutErr, ok := err.(*TimeoutError); !ok {
-					return err
-				} else {
-					lastErr = timeoutErr
-					// If this is not the last attempt, continue retrying
+				// Success: return immediately
+				if err == nil {
+					return nil
+				}
+
+				// If it is a timeout, retry up to maxRetries
+				var tErr *TimeoutError
+				if errors.As(err, &tErr) {
+					lastErr = err
 					if attempt < maxRetries {
 						continue
 					}
+					// Out of retries: return the timeout error
+					return err
 				}
+
+				// Non-timeout error: do not retry
+				return err
 			}
 
+			// Should not reach here normally; return the last seen error
 			return lastErr
 		}
 	}
@@ -281,16 +291,16 @@ func NewTimeoutStats() *TimeoutStats {
 
 // TimeoutWithStats creates a timeout middleware that tracks statistics
 func TimeoutWithStats(duration time.Duration, stats *TimeoutStats) Middleware {
-    return func(next ActionFunc) ActionFunc {
-        return func(ctx Context) error {
-            start := time.Now()
+	return func(next ActionFunc) ActionFunc {
+		return func(ctx Context) error {
+			start := time.Now()
 
-            parent := context.Background()
-            if c, ok := any(ctx).(interface{ Context() context.Context }); ok {
-                parent = c.Context()
-            }
-            timeoutCtx, cancel := context.WithTimeout(parent, duration)
-            defer cancel()
+			parent := context.Background()
+			if c, ok := any(ctx).(interface{ Context() context.Context }); ok {
+				parent = c.Context()
+			}
+			timeoutCtx, cancel := context.WithTimeout(parent, duration)
+			defer cancel()
 
 			resultChan := make(chan error, 1)
 

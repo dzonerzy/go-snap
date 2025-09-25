@@ -15,31 +15,31 @@ func main() {
 		Version("1.0.0").
 		Author("go-snap", "support@go-snap.dev").
 		// Global middleware applied to all commands
-        Use(
-            middleware.Logger(middleware.WithLogLevel(middleware.LogLevelInfo)),
-            middleware.Recovery(middleware.WithStackTrace(true)),
-            middleware.Timeout(30*time.Second),
-            // Friendlier validation syntax
-            middleware.Validate(
-                middleware.Custom("port_range", validatePortRange),
-            ),
-        ).
+		Use(
+			middleware.Logger(middleware.WithLogLevel(middleware.LogLevelInfo)),
+			middleware.Recovery(middleware.WithStackTrace(true)),
+			middleware.Timeout(30*time.Second),
+			// Friendlier validation syntax
+			middleware.Validate(
+				middleware.Custom("port_range", validatePortRange),
+			),
+		).
 		// Global flags with environment variable support
 		BoolFlag("verbose", "Enable verbose logging").
 		Short('v').
 		FromEnv("VERBOSE", "DEBUG").Back().
-        StringFlag("config", "Configuration file").
-        Default("config/config.json").Global().
-        FromEnv("CONFIG_FILE", "APP_CONFIG").Back()
+		StringFlag("config", "Configuration file").
+		Default("config/config.json").Global().
+		FromEnv("CONFIG_FILE", "APP_CONFIG").Back()
 
 	// Serve command with command-specific middleware
 	app.Command("serve", "Start the HTTP server").
 		// Command-specific middleware (runs after global middleware)
-            Use(
-                middleware.Validate(
-                    middleware.Custom("port_range", validatePortRange),
-                ),
-            ).
+		Use(
+			middleware.Validate(
+				middleware.Custom("port_range", validatePortRange),
+			),
+		).
 		IntFlag("port", "Server port").
 		Default(8080).
 		FromEnv("PORT", "SERVER_PORT").Back().
@@ -52,15 +52,15 @@ func main() {
 	app.Command("status", "Check server status").
 		Action(statusAction)
 
-	// Config command with different middleware configuration
-    app.Command("config", "Manage configuration").
-        Use(
-            middleware.JSONLogger(), // JSON format for config operations
-        ).
-        Command("validate", "Validate configuration file").
-        // Ensure the provided --config points to an existing file
-        Use(middleware.Validate(middleware.File("config"))).
-        Action(validateConfigAction)
+		// Config command with different middleware configuration
+	app.Command("config", "Manage configuration").
+		Use(
+			middleware.JSONLogger(), // JSON format for config operations
+		).
+		Command("validate", "Validate configuration file").
+		// Ensure the provided --config points to an existing file
+		Use(middleware.Validate(middleware.File("config"))).
+		Action(validateConfigAction)
 
 	if err := app.Run(); err != nil {
 		log.Fatal(err)

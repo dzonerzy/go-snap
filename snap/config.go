@@ -1,22 +1,22 @@
 package snap
 
 import (
-    "encoding/json"
-    "fmt"
-    "os"
-    "path/filepath"
-    "reflect"
-    "strconv"
-    "strings"
-    "time"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strconv"
+	"strings"
+	"time"
 
-    "github.com/dzonerzy/go-snap/middleware"
+	"github.com/dzonerzy/go-snap/middleware"
 )
 
 // D is a convenient type alias for default values map, similar to bson.D or gin.H
 // Usage: snap.D{"host": "localhost", "port": 8080}
 type D map[string]any
-
 
 // FieldSchema defines the schema for a configuration field
 type FieldSchema struct {
@@ -33,23 +33,23 @@ type FieldSchema struct {
 	DescTag     string
 	EnumTag     string
 	GroupTag    string
-	IgnoreTag   string   // ignore:"true" - skip flag generation
+	IgnoreTag   string // ignore:"true" - skip flag generation
 	EnumValues  []string
 	GroupName   string
-	Ignored     bool     // Parsed from IgnoreTag
+	Ignored     bool // Parsed from IgnoreTag
 }
 
-// parseFlagTagOptions parses flag tag to extract name and options
+// parseFlagTagOptions parses flag tag to extract name and options.
 // Supports syntax like: flag:"port,required,ignore"
-func parseFlagTagOptions(flagTag string) (name string, options map[string]bool) {
-	options = make(map[string]bool)
+func parseFlagTagOptions(flagTag string) (string, map[string]bool) {
+	options := make(map[string]bool)
 
 	if flagTag == "" {
 		return "", options
 	}
 
 	parts := strings.Split(flagTag, ",")
-	name = strings.TrimSpace(parts[0])
+	name := strings.TrimSpace(parts[0])
 
 	// Parse options from remaining parts
 	for i := 1; i < len(parts); i++ {
@@ -72,17 +72,17 @@ type GroupSchema struct {
 // ConfigSchema represents the overall configuration schema
 type ConfigSchema struct {
 	Fields map[string]*FieldSchema
-	Groups map[string]*GroupSchema  // Enhanced group information
+	Groups map[string]*GroupSchema // Enhanced group information
 }
 
 // ConfigBuilder provides fluent API for configuration management
 type ConfigBuilder struct {
-	app            *App
-	schema         *ConfigSchema
-	target         any
+	app               *App
+	schema            *ConfigSchema
+	target            any
 	precedenceManager *PrecedenceManager
-	pendingSources []func()
-	flagsEnabled   bool  // Track if FromFlags() was called - enables CLI generation
+	pendingSources    []func()
+	flagsEnabled      bool // Track if FromFlags() was called - enables CLI generation
 }
 
 // Config creates a standalone configuration builder with app name and description
@@ -180,7 +180,7 @@ func (cb *ConfigBuilder) FromEnv() *ConfigBuilder {
 // FromFlags enables CLI flag generation and adds flag-based configuration source
 // This is the trigger that transforms a pure config loader into a full CLI application
 func (cb *ConfigBuilder) FromFlags() *ConfigBuilder {
-	cb.flagsEnabled = true  // Enable CLI functionality
+	cb.flagsEnabled = true // Enable CLI functionality
 
 	if cb.schema != nil {
 		// Schema exists, generate flags immediately
@@ -199,7 +199,7 @@ func (cb *ConfigBuilder) FromFlags() *ConfigBuilder {
 // Build resolves the configuration and returns either an App (if FromFlags was used) or populates struct immediately
 func (cb *ConfigBuilder) Build() (*App, error) {
 	if cb.target == nil || cb.schema == nil {
-		return nil, fmt.Errorf("must call Bind() before Build()")
+		return nil, errors.New("must call Bind() before Build()")
 	}
 
 	if cb.flagsEnabled {
@@ -210,11 +210,10 @@ func (cb *ConfigBuilder) Build() (*App, error) {
 		cb.app.configBuilder = cb
 
 		return cb.app, nil
-	} else {
-		// Config-only mode: populate struct immediately and return nil App
-		err := cb.buildConfigOnly()
-		return nil, err
 	}
+	// Config-only mode: populate struct immediately and return nil App
+	err := cb.buildConfigOnly()
+	return nil, err
 }
 
 // buildConfigOnly handles immediate config population (no CLI parsing)
@@ -256,7 +255,14 @@ func (cb *ConfigBuilder) parseStructFields(structType reflect.Type, prefix strin
 }
 
 // parseStructFieldsWithGroup recursively parses struct fields with group inheritance
-func (cb *ConfigBuilder) parseStructFieldsWithGroup(structType reflect.Type, prefix string, inheritedGroup string, schema *ConfigSchema) {
+//
+//nolint:gocognit // Schema parsing needs explicit branching for various field/tag combinations.
+func (cb *ConfigBuilder) parseStructFieldsWithGroup(
+	structType reflect.Type,
+	prefix string,
+	inheritedGroup string,
+	schema *ConfigSchema,
+) {
 	for i := 0; i < structType.NumField(); i++ {
 		field := structType.Field(i)
 		fieldType := field.Type
@@ -269,7 +275,8 @@ func (cb *ConfigBuilder) parseStructFieldsWithGroup(structType reflect.Type, pre
 		fieldName := cb.getFieldName(field, prefix)
 
 		// Handle nested structs
-		if fieldType.Kind() == reflect.Struct && fieldType != reflect.TypeOf(time.Time{}) && fieldType != reflect.TypeOf(time.Duration(0)) {
+		if fieldType.Kind() == reflect.Struct && fieldType != reflect.TypeOf(time.Time{}) &&
+			fieldType != reflect.TypeOf(time.Duration(0)) {
 			nestedGroupName := field.Tag.Get("group")
 			if nestedGroupName == "" {
 				nestedGroupName = strings.ToLower(field.Name)
@@ -418,7 +425,7 @@ func (cb *ConfigBuilder) getFieldName(field reflect.StructField, prefix string) 
 // parseDefaultValue parses default value string to appropriate type
 func (cb *ConfigBuilder) parseDefaultValue(defaultStr string, fieldType reflect.Type) any {
 	pm := NewPrecedenceManager()
-	switch fieldType.Kind() {
+	switch fieldType.Kind() { //nolint:exhaustive // only handle supported defaultable kinds
 	case reflect.String:
 		return defaultStr
 	case reflect.Bool:
@@ -452,18 +459,20 @@ func (cb *ConfigBuilder) parseDefaultValue(defaultStr string, fieldType reflect.
 }
 
 // generateFlags automatically generates CLI flags from schema
+//
+//nolint:gocognit,gocyclo,cyclop,funlen // Generates many flag types/options; complexity accepted for clarity.
 func (cb *ConfigBuilder) generateFlags() {
 	if cb.app == nil {
 		return
 	}
 
-    // Create flag groups first
-    groupBuilders := make(map[string]*FlagGroupBuilder[*App])
+	// Create flag groups first
+	groupBuilders := make(map[string]*FlagGroupBuilder[*App])
 	for groupName, groupSchema := range cb.schema.Groups {
 		groupBuilder := cb.app.FlagGroup(groupName).Description(groupSchema.Description)
 
 		// Apply group constraint based on schema
-		switch groupSchema.Constraint {
+		switch groupSchema.Constraint { // exhaustive over GroupConstraintType
 		case GroupMutuallyExclusive:
 			groupBuilder = groupBuilder.MutuallyExclusive()
 		case GroupAllOrNone:
@@ -472,6 +481,8 @@ func (cb *ConfigBuilder) generateFlags() {
 			groupBuilder = groupBuilder.AtLeastOne()
 		case GroupExactlyOne:
 			groupBuilder = groupBuilder.ExactlyOne()
+		case GroupRequiredGroup:
+			groupBuilder = groupBuilder.RequiredGroup()
 		case GroupNoConstraint:
 			// No constraint needed - flags work independently
 		}
@@ -494,22 +505,24 @@ func (cb *ConfigBuilder) generateFlags() {
 		// Determine if this flag belongs to a group
 		var flagBuilder interface{}
 
+		//nolint:nestif // Flag generation across types/groups is clearer with explicit branching.
 		if fieldSchema.GroupName != "" && groupBuilders[fieldSchema.GroupName] != nil {
 			// Add flag to group
 			groupBuilder := groupBuilders[fieldSchema.GroupName]
 
 			// Generate appropriate flag type based on field type
-			switch fieldSchema.Type.Kind() {
-            case reflect.String:
-                if len(fieldSchema.EnumValues) > 0 {
-                    // For enum fields, add validation note and create enum flag
-                    description += fmt.Sprintf(" (valid values: %s)", strings.Join(fieldSchema.EnumValues, ", "))
-                    flagBuilder = groupBuilder.EnumFlag(flagName, description, fieldSchema.EnumValues...)
-                } else {
-                    flagBuilder = groupBuilder.StringFlag(flagName, description)
-                }
-            case reflect.Bool:
-                flagBuilder = groupBuilder.BoolFlag(flagName, description)
+			switch fieldSchema.Type.Kind() { //nolint:exhaustive // only supported kinds become flags
+			case reflect.String:
+				//nolint:nestif // Enum vs string handling requires nested checks for correctness.
+				if len(fieldSchema.EnumValues) > 0 {
+					// For enum fields, add validation note and create enum flag
+					description += fmt.Sprintf(" (valid values: %s)", strings.Join(fieldSchema.EnumValues, ", "))
+					flagBuilder = groupBuilder.EnumFlag(flagName, description, fieldSchema.EnumValues...)
+				} else {
+					flagBuilder = groupBuilder.StringFlag(flagName, description)
+				}
+			case reflect.Bool:
+				flagBuilder = groupBuilder.BoolFlag(flagName, description)
 			case reflect.Int:
 				flagBuilder = groupBuilder.IntFlag(flagName, description)
 			case reflect.Int64:
@@ -520,48 +533,49 @@ func (cb *ConfigBuilder) generateFlags() {
 				}
 			case reflect.Float64:
 				flagBuilder = groupBuilder.FloatFlag(flagName, description)
-            case reflect.Slice:
-                if fieldSchema.Type.Elem().Kind() == reflect.String {
-                    flagBuilder = groupBuilder.StringSliceFlag(flagName, description)
-                } else if fieldSchema.Type.Elem().Kind() == reflect.Int {
-                    flagBuilder = groupBuilder.IntSliceFlag(flagName, description)
-                }
-            }
-        } else {
-            // Add flag directly to app
-            switch fieldSchema.Type.Kind() {
-            case reflect.String:
-                if len(fieldSchema.EnumValues) > 0 {
-                    // For enum fields, add validation note and create enum flag
-                    description += fmt.Sprintf(" (valid values: %s)", strings.Join(fieldSchema.EnumValues, ", "))
-                    flagBuilder = cb.app.EnumFlag(flagName, description, fieldSchema.EnumValues...)
-                } else {
-                    flagBuilder = cb.app.StringFlag(flagName, description)
-                }
-            case reflect.Bool:
-                flagBuilder = cb.app.BoolFlag(flagName, description)
-            case reflect.Int:
-                flagBuilder = cb.app.IntFlag(flagName, description)
-            case reflect.Int64:
-                if fieldSchema.Type == reflect.TypeOf(time.Duration(0)) {
-                    flagBuilder = cb.app.DurationFlag(flagName, description)
-                } else {
-                    flagBuilder = cb.app.IntFlag(flagName, description)
-                }
-            case reflect.Float64:
-                flagBuilder = cb.app.FloatFlag(flagName, description)
-            case reflect.Slice:
-                if fieldSchema.Type.Elem().Kind() == reflect.String {
-                    flagBuilder = cb.app.StringSliceFlag(flagName, description)
-                } else if fieldSchema.Type.Elem().Kind() == reflect.Int {
-                    flagBuilder = cb.app.IntSliceFlag(flagName, description)
-                }
-            }
-        }
+			case reflect.Slice:
+				//nolint:nestif // Slice element-type branching is explicit by design.
+				if fieldSchema.Type.Elem().Kind() == reflect.String {
+					flagBuilder = groupBuilder.StringSliceFlag(flagName, description)
+				} else if fieldSchema.Type.Elem().Kind() == reflect.Int {
+					flagBuilder = groupBuilder.IntSliceFlag(flagName, description)
+				}
+			}
+		} else {
+			// Add flag directly to app
+			switch fieldSchema.Type.Kind() { //nolint:exhaustive // only supported kinds become flags
+			case reflect.String:
+				if len(fieldSchema.EnumValues) > 0 {
+					// For enum fields, add validation note and create enum flag
+					description += fmt.Sprintf(" (valid values: %s)", strings.Join(fieldSchema.EnumValues, ", "))
+					flagBuilder = cb.app.EnumFlag(flagName, description, fieldSchema.EnumValues...)
+				} else {
+					flagBuilder = cb.app.StringFlag(flagName, description)
+				}
+			case reflect.Bool:
+				flagBuilder = cb.app.BoolFlag(flagName, description)
+			case reflect.Int:
+				flagBuilder = cb.app.IntFlag(flagName, description)
+			case reflect.Int64:
+				if fieldSchema.Type == reflect.TypeOf(time.Duration(0)) {
+					flagBuilder = cb.app.DurationFlag(flagName, description)
+				} else {
+					flagBuilder = cb.app.IntFlag(flagName, description)
+				}
+			case reflect.Float64:
+				flagBuilder = cb.app.FloatFlag(flagName, description)
+			case reflect.Slice:
+				if fieldSchema.Type.Elem().Kind() == reflect.String {
+					flagBuilder = cb.app.StringSliceFlag(flagName, description)
+				} else if fieldSchema.Type.Elem().Kind() == reflect.Int {
+					flagBuilder = cb.app.IntSliceFlag(flagName, description)
+				}
+			}
+		}
 
-        // Apply common flag settings based on field type
-        cb.applyFlagSettings(flagBuilder, fieldSchema)
-    }
+		// Apply common flag settings based on field type
+		cb.applyFlagSettings(flagBuilder, fieldSchema)
+	}
 
 	// Close all flag groups
 	for _, groupBuilder := range groupBuilders {
@@ -570,137 +584,139 @@ func (cb *ConfigBuilder) generateFlags() {
 }
 
 // applyFlagSettings applies common settings to flag builders
+//
+//nolint:gocognit,gocyclo,cyclop,errcheck,funlen // Centralized settings per flag type; verbose but cohesive.
 func (cb *ConfigBuilder) applyFlagSettings(flagBuilder interface{}, fieldSchema *FieldSchema) {
 	// Apply settings based on the flag builder type using type assertions
-    switch fb := flagBuilder.(type) {
-    case *FlagBuilder[string, *App]:
-        if fieldSchema.Default != nil {
-            fb.Default(fieldSchema.Default.(string))
-        }
-        if fieldSchema.Required {
-            fb.Required()
-        }
-        fb.Global()
-    case *FlagBuilder[string, *FlagGroupBuilder[*App]]:
-        if fieldSchema.Default != nil {
-            fb.Default(fieldSchema.Default.(string))
-        }
-        if fieldSchema.Required {
-            fb.Required()
-        }
-        fb.Global()
-    case *FlagBuilder[bool, *App]:
-        if fieldSchema.Default != nil {
-            fb.Default(fieldSchema.Default.(bool))
-        }
-        fb.Global()
-    case *FlagBuilder[bool, *FlagGroupBuilder[*App]]:
-        if fieldSchema.Default != nil {
-            fb.Default(fieldSchema.Default.(bool))
-        }
-        fb.Global()
-    case *FlagBuilder[int, *App]:
-        if fieldSchema.Default != nil {
-            fb.Default(fieldSchema.Default.(int))
-        }
-        if fieldSchema.Required {
-            fb.Required()
-        }
-        fb.Global()
-    case *FlagBuilder[int, *FlagGroupBuilder[*App]]:
-        if fieldSchema.Default != nil {
-            fb.Default(fieldSchema.Default.(int))
-        }
-        if fieldSchema.Required {
-            fb.Required()
-        }
-        fb.Global()
-    case *FlagBuilder[time.Duration, *App]:
-        if fieldSchema.Default != nil {
-            fb.Default(fieldSchema.Default.(time.Duration))
-        }
-        if fieldSchema.Required {
-            fb.Required()
-        }
-        fb.Global()
-    case *FlagBuilder[time.Duration, *FlagGroupBuilder[*App]]:
-        if fieldSchema.Default != nil {
-            fb.Default(fieldSchema.Default.(time.Duration))
-        }
-        if fieldSchema.Required {
-            fb.Required()
-        }
-        fb.Global()
-    case *FlagBuilder[float64, *App]:
-        if fieldSchema.Default != nil {
-            fb.Default(fieldSchema.Default.(float64))
-        }
-        if fieldSchema.Required {
-            fb.Required()
-        }
-        fb.Global()
-    case *FlagBuilder[float64, *FlagGroupBuilder[*App]]:
-        if fieldSchema.Default != nil {
-            fb.Default(fieldSchema.Default.(float64))
-        }
-        if fieldSchema.Required {
-            fb.Required()
-        }
-        fb.Global()
-    case *FlagBuilder[[]string, *App]:
-        if fieldSchema.Default != nil {
-            fb.Default(fieldSchema.Default.([]string))
-        }
-        if fieldSchema.Required {
-            fb.Required()
-        }
-        fb.Global()
-    case *FlagBuilder[[]string, *FlagGroupBuilder[*App]]:
-        if fieldSchema.Default != nil {
-            fb.Default(fieldSchema.Default.([]string))
-        }
-        if fieldSchema.Required {
-            fb.Required()
-        }
-        fb.Global()
-    case *FlagBuilder[[]int, *App]:
-        if fieldSchema.Default != nil {
-            fb.Default(fieldSchema.Default.([]int))
-        }
-        if fieldSchema.Required {
-            fb.Required()
-        }
-        fb.Global()
-    case *FlagBuilder[[]int, *FlagGroupBuilder[*App]]:
-        if fieldSchema.Default != nil {
-            fb.Default(fieldSchema.Default.([]int))
-        }
-        if fieldSchema.Required {
-            fb.Required()
-        }
-        fb.Global()
-    }
+	switch fb := flagBuilder.(type) {
+	case *FlagBuilder[string, *App]:
+		if fieldSchema.Default != nil {
+			fb = fb.Default(fieldSchema.Default.(string))
+		}
+		if fieldSchema.Required {
+			fb.Required()
+		}
+		fb.Global()
+	case *FlagBuilder[string, *FlagGroupBuilder[*App]]:
+		if fieldSchema.Default != nil {
+			fb = fb.Default(fieldSchema.Default.(string))
+		}
+		if fieldSchema.Required {
+			fb.Required()
+		}
+		fb.Global()
+	case *FlagBuilder[bool, *App]:
+		if fieldSchema.Default != nil {
+			fb = fb.Default(fieldSchema.Default.(bool))
+		}
+		fb.Global()
+	case *FlagBuilder[bool, *FlagGroupBuilder[*App]]:
+		if fieldSchema.Default != nil {
+			fb = fb.Default(fieldSchema.Default.(bool))
+		}
+		fb.Global()
+	case *FlagBuilder[int, *App]:
+		if fieldSchema.Default != nil {
+			fb = fb.Default(fieldSchema.Default.(int))
+		}
+		if fieldSchema.Required {
+			fb.Required()
+		}
+		fb.Global()
+	case *FlagBuilder[int, *FlagGroupBuilder[*App]]:
+		if fieldSchema.Default != nil {
+			fb = fb.Default(fieldSchema.Default.(int))
+		}
+		if fieldSchema.Required {
+			fb.Required()
+		}
+		fb.Global()
+	case *FlagBuilder[time.Duration, *App]:
+		if fieldSchema.Default != nil {
+			fb = fb.Default(fieldSchema.Default.(time.Duration))
+		}
+		if fieldSchema.Required {
+			fb.Required()
+		}
+		fb.Global()
+	case *FlagBuilder[time.Duration, *FlagGroupBuilder[*App]]:
+		if fieldSchema.Default != nil {
+			fb = fb.Default(fieldSchema.Default.(time.Duration))
+		}
+		if fieldSchema.Required {
+			fb.Required()
+		}
+		fb.Global()
+	case *FlagBuilder[float64, *App]:
+		if fieldSchema.Default != nil {
+			fb = fb.Default(fieldSchema.Default.(float64))
+		}
+		if fieldSchema.Required {
+			fb.Required()
+		}
+		fb.Global()
+	case *FlagBuilder[float64, *FlagGroupBuilder[*App]]:
+		if fieldSchema.Default != nil {
+			fb = fb.Default(fieldSchema.Default.(float64))
+		}
+		if fieldSchema.Required {
+			fb.Required()
+		}
+		fb.Global()
+	case *FlagBuilder[[]string, *App]:
+		if fieldSchema.Default != nil {
+			fb = fb.Default(fieldSchema.Default.([]string))
+		}
+		if fieldSchema.Required {
+			fb.Required()
+		}
+		fb.Global()
+	case *FlagBuilder[[]string, *FlagGroupBuilder[*App]]:
+		if fieldSchema.Default != nil {
+			fb = fb.Default(fieldSchema.Default.([]string))
+		}
+		if fieldSchema.Required {
+			fb.Required()
+		}
+		fb.Global()
+	case *FlagBuilder[[]int, *App]:
+		if fieldSchema.Default != nil {
+			fb = fb.Default(fieldSchema.Default.([]int))
+		}
+		if fieldSchema.Required {
+			fb.Required()
+		}
+		fb.Global()
+	case *FlagBuilder[[]int, *FlagGroupBuilder[*App]]:
+		if fieldSchema.Default != nil {
+			fb = fb.Default(fieldSchema.Default.([]int))
+		}
+		if fieldSchema.Required {
+			fb.Required()
+		}
+		fb.Global()
+	}
 }
 
 // loadFromFile loads configuration from JSON file
 func (cb *ConfigBuilder) loadFromFile(filename string) (map[string]any, error) {
-    // Support JSON only; ignore other formats by returning an error so caller skips adding the source
-    ext := strings.ToLower(filepath.Ext(filename))
-    if ext != ".json" {
-        return nil, fmt.Errorf("unsupported config format: %s (only .json supported)", ext)
-    }
+	// Support JSON only; ignore other formats by returning an error so caller skips adding the source
+	ext := strings.ToLower(filepath.Ext(filename))
+	if ext != ".json" {
+		return nil, fmt.Errorf("unsupported config format: %s (only .json supported)", ext)
+	}
 
-    data, err := os.ReadFile(filename)
-    if err != nil {
-        return nil, err
-    }
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
 
-    var config map[string]any
-    if err := json.Unmarshal(data, &config); err != nil {
-        return nil, err
-    }
+	var config map[string]any
+	if uErr := json.Unmarshal(data, &config); uErr != nil {
+		return nil, uErr
+	}
 
-    return config, nil
+	return config, nil
 }
 
 // loadFromEnv loads configuration from environment variables based on struct tags
@@ -719,197 +735,217 @@ func (cb *ConfigBuilder) loadFromEnv() map[string]any {
 }
 
 // collectFlagValues collects values from parsed flags
+//
+//nolint:gocognit,gocyclo,cyclop // Collects values across types and precedence; complexity expected.
 func (cb *ConfigBuilder) collectFlagValues() {
-    flagData := make(map[string]any)
+	flagData := make(map[string]any)
 
-    // Collect flag values from app context
-    for fieldName, fieldSchema := range cb.schema.Fields {
-        flagName := fieldName
-        if fieldSchema.FlagTag != "" {
-            flagName = fieldSchema.FlagTag
-        }
+	// Collect flag values from app context
+	for fieldName, fieldSchema := range cb.schema.Fields {
+		flagName := fieldName
+		if fieldSchema.FlagTag != "" {
+			flagName = fieldSchema.FlagTag
+		}
 
-        // Try to get flag value based on type
-        switch fieldSchema.Type.Kind() {
-        case reflect.String:
-            // If schema declares enum values, pull from enum storage first
-            if len(fieldSchema.EnumValues) > 0 {
-                if value, exists := cb.app.getEnumFlagValue(flagName); exists {
-                    // Skip if equals default to avoid promoting defaults to Flags precedence
-                    if def, ok := fieldSchema.Default.(string); !ok || value != def {
-                        flagData[fieldName] = value
-                    }
-                }
-            } else {
-                if value, exists := cb.app.getStringFlagValue(flagName); exists {
-                    if def, ok := fieldSchema.Default.(string); !ok || value != def {
-                        flagData[fieldName] = value
-                    }
-                }
-            }
-        case reflect.Bool:
-            if value, exists := cb.app.getBoolFlagValue(flagName); exists {
-                if def, ok := fieldSchema.Default.(bool); !ok || value != def {
-                    flagData[fieldName] = value
-                }
-            }
-        case reflect.Int:
-            if value, exists := cb.app.getIntFlagValue(flagName); exists {
-                if def, ok := fieldSchema.Default.(int); !ok || value != def {
-                    flagData[fieldName] = value
-                }
-            }
-        case reflect.Int64:
-            if fieldSchema.Type == reflect.TypeOf(time.Duration(0)) {
-                if value, exists := cb.app.getDurationFlagValue(flagName); exists {
-                    if def, ok := fieldSchema.Default.(time.Duration); !ok || value != def {
-                        flagData[fieldName] = value
-                    }
-                }
-            }
-        case reflect.Float64:
-            if value, exists := cb.app.getFloatFlagValue(flagName); exists {
-                if def, ok := fieldSchema.Default.(float64); !ok || value != def {
-                    flagData[fieldName] = value
-                }
-            }
-        case reflect.Slice:
-            // Handle []string and []int
-            if fieldSchema.Type.Elem().Kind() == reflect.String {
-                if value, exists := cb.app.getStringSliceFlagValue(flagName); exists {
-                    // compare lengths and items if default exists
-                    if def, ok := fieldSchema.Default.([]string); ok {
-                        if len(def) == len(value) {
-                            equal := true
-                            for i := range def { if def[i] != value[i] { equal = false; break } }
-                            if !equal { flagData[fieldName] = value }
-                        } else { flagData[fieldName] = value }
-                    } else {
-                        flagData[fieldName] = value
-                    }
-                }
-            } else if fieldSchema.Type.Elem().Kind() == reflect.Int {
-                if value, exists := cb.app.getIntSliceFlagValue(flagName); exists {
-                    if def, ok := fieldSchema.Default.([]int); ok {
-                        if len(def) == len(value) {
-                            equal := true
-                            for i := range def { if def[i] != value[i] { equal = false; break } }
-                            if !equal { flagData[fieldName] = value }
-                        } else { flagData[fieldName] = value }
-                    } else {
-                        flagData[fieldName] = value
-                    }
-                }
-            }
-        }
-    }
+		// Try to get flag value based on type
+		switch fieldSchema.Type.Kind() { //nolint:exhaustive // only supported kinds are collected
+		case reflect.String:
+			// If schema declares enum values, pull from enum storage first
+			//nolint:nestif // explicit nested check keeps enum vs string retrieval readable
+			if len(fieldSchema.EnumValues) > 0 {
+				if value, exists := cb.app.getEnumFlagValue(flagName); exists {
+					// Skip if equals default to avoid promoting defaults to Flags precedence
+					if def, ok := fieldSchema.Default.(string); !ok || value != def {
+						flagData[fieldName] = value
+					}
+				}
+			} else {
+				if value, exists := cb.app.getStringFlagValue(flagName); exists {
+					if def, ok := fieldSchema.Default.(string); !ok || value != def {
+						flagData[fieldName] = value
+					}
+				}
+			}
+		case reflect.Bool:
+			if value, exists := cb.app.getBoolFlagValue(flagName); exists {
+				if def, ok := fieldSchema.Default.(bool); !ok || value != def {
+					flagData[fieldName] = value
+				}
+			}
+		case reflect.Int:
+			if value, exists := cb.app.getIntFlagValue(flagName); exists {
+				if def, ok := fieldSchema.Default.(int); !ok || value != def {
+					flagData[fieldName] = value
+				}
+			}
+		case reflect.Int64:
+			if fieldSchema.Type == reflect.TypeOf(time.Duration(0)) {
+				if value, exists := cb.app.getDurationFlagValue(flagName); exists {
+					if def, ok := fieldSchema.Default.(time.Duration); !ok || value != def {
+						flagData[fieldName] = value
+					}
+				}
+			}
+		case reflect.Float64:
+			if value, exists := cb.app.getFloatFlagValue(flagName); exists {
+				if def, ok := fieldSchema.Default.(float64); !ok || value != def {
+					flagData[fieldName] = value
+				}
+			}
+		case reflect.Slice:
+			// Handle []string and []int
+			//nolint:nestif // explicit element-type branching is intentional
+			if fieldSchema.Type.Elem().Kind() == reflect.String {
+				if value, exists := cb.app.getStringSliceFlagValue(flagName); exists {
+					// compare lengths and items if default exists
+					if def, ok := fieldSchema.Default.([]string); ok {
+						if len(def) == len(value) {
+							equal := true
+							for i := range def {
+								if def[i] != value[i] {
+									equal = false
+									break
+								}
+							}
+							if !equal {
+								flagData[fieldName] = value
+							}
+						} else {
+							flagData[fieldName] = value
+						}
+					} else {
+						flagData[fieldName] = value
+					}
+				}
+			} else if fieldSchema.Type.Elem().Kind() == reflect.Int {
+				if value, exists := cb.app.getIntSliceFlagValue(flagName); exists {
+					if def, ok := fieldSchema.Default.([]int); ok {
+						if len(def) == len(value) {
+							equal := true
+							for i := range def {
+								if def[i] != value[i] {
+									equal = false
+									break
+								}
+							}
+							if !equal {
+								flagData[fieldName] = value
+							}
+						} else {
+							flagData[fieldName] = value
+						}
+					} else {
+						flagData[fieldName] = value
+					}
+				}
+			}
+		}
+	}
 
-    // Add collected flag data to precedence manager
-    if len(flagData) > 0 {
-        cb.precedenceManager.AddSource(SourceTypeFlags, flagData)
-    }
+	// Add collected flag data to precedence manager
+	if len(flagData) > 0 {
+		cb.precedenceManager.AddSource(SourceTypeFlags, flagData)
+	}
 }
 
 // Helper methods to get flag values from current parse result
 func (a *App) getStringFlagValue(name string) (string, bool) {
-    if a.currentResult == nil {
-        return "", false
-    }
-    if v, ok := a.currentResult.GetString(name); ok {
-        return v, true
-    }
-    return a.currentResult.GetGlobalString(name)
+	if a.currentResult == nil {
+		return "", false
+	}
+	if v, ok := a.currentResult.GetString(name); ok {
+		return v, true
+	}
+	return a.currentResult.GetGlobalString(name)
 }
 
 func (a *App) getBoolFlagValue(name string) (bool, bool) {
-    if a.currentResult == nil {
-        return false, false
-    }
-    if v, ok := a.currentResult.GetBool(name); ok {
-        return v, true
-    }
-    return a.currentResult.GetGlobalBool(name)
+	if a.currentResult == nil {
+		return false, false
+	}
+	if v, ok := a.currentResult.GetBool(name); ok {
+		return v, true
+	}
+	return a.currentResult.GetGlobalBool(name)
 }
 
 func (a *App) getIntFlagValue(name string) (int, bool) {
-    if a.currentResult == nil {
-        return 0, false
-    }
-    if v, ok := a.currentResult.GetInt(name); ok {
-        return v, true
-    }
-    return a.currentResult.GetGlobalInt(name)
+	if a.currentResult == nil {
+		return 0, false
+	}
+	if v, ok := a.currentResult.GetInt(name); ok {
+		return v, true
+	}
+	return a.currentResult.GetGlobalInt(name)
 }
 
 func (a *App) getDurationFlagValue(name string) (time.Duration, bool) {
-    if a.currentResult == nil {
-        return 0, false
-    }
-    if v, ok := a.currentResult.GetDuration(name); ok {
-        return v, true
-    }
-    return a.currentResult.GetGlobalDuration(name)
+	if a.currentResult == nil {
+		return 0, false
+	}
+	if v, ok := a.currentResult.GetDuration(name); ok {
+		return v, true
+	}
+	return a.currentResult.GetGlobalDuration(name)
 }
 
 func (a *App) getFloatFlagValue(name string) (float64, bool) {
-    if a.currentResult == nil {
-        return 0, false
-    }
-    if v, ok := a.currentResult.GetFloat(name); ok {
-        return v, true
-    }
-    return a.currentResult.GetGlobalFloat(name)
+	if a.currentResult == nil {
+		return 0, false
+	}
+	if v, ok := a.currentResult.GetFloat(name); ok {
+		return v, true
+	}
+	return a.currentResult.GetGlobalFloat(name)
 }
 
 // slice and enum helpers for collectFlagValues
 func (a *App) getStringSliceFlagValue(name string) ([]string, bool) {
-    if a.currentResult == nil {
-        return nil, false
-    }
-    if v, ok := a.currentResult.GetStringSlice(name); ok {
-        return v, true
-    }
-    // also check global
-    if v, ok := a.currentResult.GetGlobalStringSlice(name); ok {
-        return v, true
-    }
-    return nil, false
+	if a.currentResult == nil {
+		return nil, false
+	}
+	if v, ok := a.currentResult.GetStringSlice(name); ok {
+		return v, true
+	}
+	// also check global
+	if v, ok := a.currentResult.GetGlobalStringSlice(name); ok {
+		return v, true
+	}
+	return nil, false
 }
 
 func (a *App) getIntSliceFlagValue(name string) ([]int, bool) {
-    if a.currentResult == nil {
-        return nil, false
-    }
-    if v, ok := a.currentResult.GetIntSlice(name); ok {
-        return v, true
-    }
-    if v, ok := a.currentResult.GetGlobalIntSlice(name); ok {
-        return v, true
-    }
-    return nil, false
+	if a.currentResult == nil {
+		return nil, false
+	}
+	if v, ok := a.currentResult.GetIntSlice(name); ok {
+		return v, true
+	}
+	if v, ok := a.currentResult.GetGlobalIntSlice(name); ok {
+		return v, true
+	}
+	return nil, false
 }
 
 func (a *App) getEnumFlagValue(name string) (string, bool) {
-    if a.currentResult == nil {
-        return "", false
-    }
-    if v, ok := a.currentResult.GetEnum(name); ok {
-        return v, true
-    }
-    if v, ok := a.currentResult.GetGlobalEnum(name); ok {
-        return v, true
-    }
-    // Fallback to string map if stored there
-    return a.currentResult.GetString(name)
+	if a.currentResult == nil {
+		return "", false
+	}
+	if v, ok := a.currentResult.GetEnum(name); ok {
+		return v, true
+	}
+	if v, ok := a.currentResult.GetGlobalEnum(name); ok {
+		return v, true
+	}
+	// Fallback to string map if stored there
+	return a.currentResult.GetString(name)
 }
-
-
 
 // applyToStruct applies the resolved configuration to the target struct
 func (cb *ConfigBuilder) applyToStruct(config map[string]any) error {
 	targetValue := reflect.ValueOf(cb.target)
 	if targetValue.Kind() != reflect.Ptr || targetValue.Elem().Kind() != reflect.Struct {
-		return fmt.Errorf("target must be a pointer to struct")
+		return errors.New("target must be a pointer to struct")
 	}
 
 	targetStruct := targetValue.Elem()
@@ -917,7 +953,12 @@ func (cb *ConfigBuilder) applyToStruct(config map[string]any) error {
 }
 
 // setStructFields recursively sets struct fields from configuration
-func (cb *ConfigBuilder) setStructFields(structValue reflect.Value, structType reflect.Type, prefix string, config map[string]any) error {
+func (cb *ConfigBuilder) setStructFields(
+	structValue reflect.Value,
+	structType reflect.Type,
+	prefix string,
+	config map[string]any,
+) error {
 	for i := 0; i < structType.NumField(); i++ {
 		field := structType.Field(i)
 		fieldValue := structValue.Field(i)
@@ -929,7 +970,8 @@ func (cb *ConfigBuilder) setStructFields(structValue reflect.Value, structType r
 		fieldName := cb.getFieldName(field, prefix)
 
 		// Handle nested structs
-		if fieldValue.Kind() == reflect.Struct && field.Type != reflect.TypeOf(time.Time{}) && field.Type != reflect.TypeOf(time.Duration(0)) {
+		if fieldValue.Kind() == reflect.Struct && field.Type != reflect.TypeOf(time.Time{}) &&
+			field.Type != reflect.TypeOf(time.Duration(0)) {
 			if err := cb.setStructFields(fieldValue, field.Type, fieldName+".", config); err != nil {
 				return err
 			}
@@ -965,10 +1007,13 @@ func (cb *ConfigBuilder) setFieldValue(fieldValue reflect.Value, value any) erro
 
 	// String conversion
 	if valueReflect.Kind() == reflect.String {
+		// Use reflect to obtain the string representation safely; this also
+		// supports named string types without a direct type assertion.
+		s := valueReflect.String()
 		pm := NewPrecedenceManager()
-		convertedValue, err := pm.convertStringToType(value.(string), fieldValue.Type())
-		if err != nil {
-			return err
+		convertedValue, convErr := pm.convertStringToType(s, fieldValue.Type())
+		if convErr != nil {
+			return convErr
 		}
 		fieldValue.Set(reflect.ValueOf(convertedValue))
 		return nil
@@ -976,7 +1021,6 @@ func (cb *ConfigBuilder) setFieldValue(fieldValue reflect.Value, value any) erro
 
 	return fmt.Errorf("cannot convert %T to %s", value, fieldValue.Type())
 }
-
 
 // parseStringSliceString parses comma-separated strings: "item1,item2,item3"
 func (cb *ConfigBuilder) parseStringSliceString(s string) []string {

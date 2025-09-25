@@ -1,6 +1,7 @@
 package snap
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -16,38 +17,44 @@ type FlagParent interface {
 type FlagType string
 
 const (
-	// Core types
-	FlagTypeString   FlagType = "string"
-	FlagTypeBool     FlagType = "bool"
-	FlagTypeInt      FlagType = "int"
+	// FlagTypeString indicates a string-valued flag.
+	FlagTypeString FlagType = "string"
+	// FlagTypeBool indicates a boolean flag.
+	FlagTypeBool FlagType = "bool"
+	// FlagTypeInt indicates an integer flag.
+	FlagTypeInt FlagType = "int"
+	// FlagTypeDuration indicates a time.Duration flag.
 	FlagTypeDuration FlagType = "duration"
-	FlagTypeFloat    FlagType = "float64"
-	FlagTypeEnum     FlagType = "enum"
+	// FlagTypeFloat indicates a float64 flag.
+	FlagTypeFloat FlagType = "float64"
+	// FlagTypeEnum indicates an enumerated string flag.
+	FlagTypeEnum FlagType = "enum"
 
-	// Collection types
+	// FlagTypeStringSlice indicates a []string flag.
 	FlagTypeStringSlice FlagType = "[]string"
-	FlagTypeIntSlice    FlagType = "[]int"
+	// FlagTypeIntSlice indicates a []int flag.
+	FlagTypeIntSlice FlagType = "[]int"
 )
 
 // Flag represents a command-line flag with all its properties
 type Flag struct {
-    Name            string
-    Description     string
-    Type            FlagType
-    DefaultString   string
-    DefaultInt      int
-    DefaultBool     bool
-    DefaultDuration time.Duration
-    DefaultFloat    float64
-    DefaultEnum     string
-    DefaultStringSlice []string
-    DefaultIntSlice    []int
-    Global          bool
-    Required        bool
-    Hidden          bool
-    Short           rune
-    EnvVars         []string // Environment variables to check (in precedence order)
-	Usage           string
+	Name               string
+	Description        string
+	Type               FlagType
+	DefaultString      string
+	DefaultInt         int
+	DefaultBool        bool
+	DefaultDuration    time.Duration
+	DefaultFloat       float64
+	DefaultEnum        string
+	DefaultStringSlice []string
+	DefaultIntSlice    []int
+	Global             bool
+	Required           bool
+	Hidden             bool
+	Short              rune
+	EnvVars            []string // Environment variables to check (in precedence order)
+	Usage              string
 
 	// Enum-specific fields
 	EnumValues []string // Valid enum values
@@ -72,13 +79,16 @@ func (f *Flag) IsGlobal() bool {
 func ValidateFile(mustExist bool) func(string) error {
 	return func(path string) error {
 		if path == "" {
-			return fmt.Errorf("file path cannot be empty")
+			return errors.New("file path cannot be empty")
 		}
 		if mustExist {
-			if _, err := os.Stat(path); os.IsNotExist(err) {
-				return fmt.Errorf("file does not exist: %s", path)
-			} else if err != nil {
-				return fmt.Errorf("cannot access file %s: %v", path, err)
+			if _, err := os.Stat(path); err != nil {
+				switch {
+				case os.IsNotExist(err):
+					return fmt.Errorf("file does not exist: %s", path)
+				default:
+					return fmt.Errorf("cannot access file %s: %w", path, err)
+				}
 			}
 		}
 		return nil
@@ -89,15 +99,19 @@ func ValidateFile(mustExist bool) func(string) error {
 func ValidateDir(mustExist bool) func(string) error {
 	return func(path string) error {
 		if path == "" {
-			return fmt.Errorf("directory path cannot be empty")
+			return errors.New("directory path cannot be empty")
 		}
 		if mustExist {
 			info, err := os.Stat(path)
-			if os.IsNotExist(err) {
-				return fmt.Errorf("directory does not exist: %s", path)
-			} else if err != nil {
-				return fmt.Errorf("cannot access directory %s: %v", path, err)
-			} else if !info.IsDir() {
+			if err != nil {
+				switch {
+				case os.IsNotExist(err):
+					return fmt.Errorf("directory does not exist: %s", path)
+				default:
+					return fmt.Errorf("cannot access directory %s: %w", path, err)
+				}
+			}
+			if !info.IsDir() {
 				return fmt.Errorf("path is not a directory: %s", path)
 			}
 		}
@@ -112,7 +126,7 @@ func ValidateRegex(pattern string) func(string) error {
 	if err != nil {
 		// Return a function that always returns this compilation error
 		return func(string) error {
-			return fmt.Errorf("invalid regex pattern '%s': %v", pattern, err)
+			return fmt.Errorf("invalid regex pattern '%s': %w", pattern, err)
 		}
 	}
 
@@ -147,41 +161,41 @@ type FlagBuilder[T any, P FlagParent] struct {
 
 // Default sets the default value for the flag
 func (f *FlagBuilder[T, P]) Default(value T) *FlagBuilder[T, P] {
-    switch f.flag.Type {
-    case FlagTypeString:
-        if v, ok := any(value).(string); ok {
-            f.flag.DefaultString = v
-        }
-    case FlagTypeInt:
-        if v, ok := any(value).(int); ok {
-            f.flag.DefaultInt = v
-        }
-    case FlagTypeBool:
-        if v, ok := any(value).(bool); ok {
-            f.flag.DefaultBool = v
-        }
-    case FlagTypeDuration:
-        if v, ok := any(value).(time.Duration); ok {
-            f.flag.DefaultDuration = v
-        }
-    case FlagTypeFloat:
-        if v, ok := any(value).(float64); ok {
-            f.flag.DefaultFloat = v
-        }
-    case FlagTypeEnum:
-        if v, ok := any(value).(string); ok {
-            f.flag.DefaultEnum = v
-        }
-    case FlagTypeStringSlice:
-        if v, ok := any(value).([]string); ok {
-            f.flag.DefaultStringSlice = v
-        }
-    case FlagTypeIntSlice:
-        if v, ok := any(value).([]int); ok {
-            f.flag.DefaultIntSlice = v
-        }
-    }
-    return f
+	switch f.flag.Type {
+	case FlagTypeString:
+		if v, ok := any(value).(string); ok {
+			f.flag.DefaultString = v
+		}
+	case FlagTypeInt:
+		if v, ok := any(value).(int); ok {
+			f.flag.DefaultInt = v
+		}
+	case FlagTypeBool:
+		if v, ok := any(value).(bool); ok {
+			f.flag.DefaultBool = v
+		}
+	case FlagTypeDuration:
+		if v, ok := any(value).(time.Duration); ok {
+			f.flag.DefaultDuration = v
+		}
+	case FlagTypeFloat:
+		if v, ok := any(value).(float64); ok {
+			f.flag.DefaultFloat = v
+		}
+	case FlagTypeEnum:
+		if v, ok := any(value).(string); ok {
+			f.flag.DefaultEnum = v
+		}
+	case FlagTypeStringSlice:
+		if v, ok := any(value).([]string); ok {
+			f.flag.DefaultStringSlice = v
+		}
+	case FlagTypeIntSlice:
+		if v, ok := any(value).([]int); ok {
+			f.flag.DefaultIntSlice = v
+		}
+	}
+	return f
 }
 
 // Required marks the flag as required
@@ -245,10 +259,10 @@ func (f *FlagBuilder[T, P]) Build() interface{} {
 
 // Range sets inclusive min/max validation for numeric flags (int and float64).
 // The value must satisfy min <= value <= max.
-func Range[T int | float64, P FlagParent](f *FlagBuilder[T, P], min, max T) *FlagBuilder[T, P] {
+func Range[T int | float64, P FlagParent](f *FlagBuilder[T, P], minVal, maxVal T) *FlagBuilder[T, P] {
 	return f.Validate(func(value T) error {
-		if value < min || value > max {
-			return fmt.Errorf("value %v is not within range [%v, %v]", value, min, max)
+		if value < minVal || value > maxVal {
+			return fmt.Errorf("value %v is not within range [%v, %v]", value, minVal, maxVal)
 		}
 		return nil
 	})
@@ -287,11 +301,11 @@ type GroupConstraintType int
 
 const (
 	GroupNoConstraint      GroupConstraintType = iota // Flags work independently (DEFAULT)
-	GroupMutuallyExclusive                           // Only one flag can be set
-	GroupAllOrNone                                   // Either all flags or no flags
-	GroupAtLeastOne                                  // At least one flag must be set
-	GroupExactlyOne                                  // Exactly one flag must be set
-	GroupRequiredGroup                               // Alias for GroupAtLeastOne (deprecated)
+	GroupMutuallyExclusive                            // Only one flag can be set
+	GroupAllOrNone                                    // Either all flags or no flags
+	GroupAtLeastOne                                   // At least one flag must be set
+	GroupExactlyOne                                   // Exactly one flag must be set
+	GroupRequiredGroup                                // Alias for GroupAtLeastOne (deprecated)
 )
 
 // FlagGroup represents a group of related flags with constraints
@@ -454,7 +468,10 @@ func (g *FlagGroupBuilder[P]) IntSliceFlag(name, description string) *FlagBuilde
 }
 
 // EnumFlag creates an enum flag within the group
-func (g *FlagGroupBuilder[P]) EnumFlag(name, description string, values ...string) *FlagBuilder[string, *FlagGroupBuilder[P]] {
+func (g *FlagGroupBuilder[P]) EnumFlag(
+	name, description string,
+	values ...string,
+) *FlagBuilder[string, *FlagGroupBuilder[P]] {
 	flag := &Flag{
 		Name:        name,
 		Description: description,
