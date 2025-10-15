@@ -400,3 +400,215 @@ func TestWrapper_ForwardUnknownFlags(t *testing.T) {
 		t.Fatalf("unexpected out: %q", out.String())
 	}
 }
+
+// TestWrapperBeforeExecHook tests BeforeExec hook functionality
+func TestWrapperBeforeExecHook(t *testing.T) {
+	var capturedArgs []string
+
+	app := New("test", "test wrapper")
+	app.Command("echo", "wrap echo").
+		Wrap("/bin/echo").
+		ForwardArgs().
+		BeforeExec(func(_ *Context, args []string) ([]string, error) {
+			capturedArgs = append([]string{}, args...)
+			// Prepend a prefix to the arguments
+			return append([]string{"[BEFORE]"}, args...), nil
+		}).
+		Passthrough().
+		Back()
+
+	var out bytes.Buffer
+	app.IO().WithOut(&out)
+
+	err := app.RunWithArgs(context.Background(), []string{"echo", "hello", "world"})
+	if err != nil {
+		t.Fatalf("RunWithArgs failed: %v", err)
+	}
+
+	// Verify BeforeExec was called with correct args
+	if len(capturedArgs) != 2 || capturedArgs[0] != "hello" || capturedArgs[1] != "world" {
+		t.Errorf("Expected capturedArgs=[hello world], got %v", capturedArgs)
+	}
+
+	// Verify output includes prefix from BeforeExec
+	output := strings.TrimSpace(out.String())
+	if !strings.Contains(output, "[BEFORE]") {
+		t.Errorf("Expected output to contain '[BEFORE]', got %q", output)
+	}
+}
+
+// TestWrapperAfterExecHook tests AfterExec hook functionality
+func TestWrapperAfterExecHook(t *testing.T) {
+	var capturedResult *ExecResult
+
+	app := New("test", "test wrapper")
+	app.Command("echo", "wrap echo").
+		Wrap("/bin/echo").
+		ForwardArgs().
+		Capture().
+		AfterExec(func(_ *Context, result *ExecResult) error {
+			capturedResult = result
+			return nil
+		}).
+		Back()
+
+	err := app.RunWithArgs(context.Background(), []string{"echo", "hello"})
+	if err != nil {
+		t.Fatalf("RunWithArgs failed: %v", err)
+	}
+
+	// Verify AfterExec was called with result
+	if capturedResult == nil {
+		t.Fatal("AfterExec was not called")
+	}
+
+	if capturedResult.ExitCode != 0 {
+		t.Errorf("Expected exit code 0, got %d", capturedResult.ExitCode)
+	}
+
+	output := strings.TrimSpace(string(capturedResult.Stdout))
+	if output != "hello" {
+		t.Errorf("Expected stdout 'hello', got %q", output)
+	}
+}
+
+// TestWrapperBeforeExecError tests that BeforeExec errors stop execution
+func TestWrapperBeforeExecError(t *testing.T) {
+	app := New("test", "test wrapper")
+	app.Command("echo", "wrap echo").
+		Wrap("/bin/echo").
+		ForwardArgs().
+		BeforeExec(func(_ *Context, _ []string) ([]string, error) {
+			return nil, errors.New("before exec error")
+		}).
+		Passthrough().
+		Back()
+
+	err := app.RunWithArgs(context.Background(), []string{"echo", "hello"})
+	if err == nil {
+		t.Fatal("Expected error from BeforeExec")
+	}
+
+	if err.Error() != "before exec error" {
+		t.Errorf("Expected 'before exec error', got %q", err.Error())
+	}
+}
+
+// TestWrapperAfterExecError tests that AfterExec errors are returned
+func TestWrapperAfterExecError(t *testing.T) {
+	app := New("test", "test wrapper")
+	app.Command("true", "wrap true").
+		Wrap("/bin/true").
+		Passthrough().
+		AfterExec(func(_ *Context, _ *ExecResult) error {
+			return errors.New("after exec error")
+		}).
+		Back()
+
+	err := app.RunWithArgs(context.Background(), []string{"true"})
+	if err == nil {
+		t.Fatal("Expected error from AfterExec")
+	}
+
+	if err.Error() != "after exec error" {
+		t.Errorf("Expected 'after exec error', got %q", err.Error())
+	}
+}
+
+// TestWrapperBeforeAfterExecCombined tests BeforeExec and AfterExec together
+func TestWrapperBeforeAfterExecCombined(t *testing.T) {
+	var executionOrder []string
+
+	app := New("test", "test wrapper")
+	app.Command("echo", "wrap echo").
+		Wrap("/bin/echo").
+		ForwardArgs().
+		BeforeExec(func(_ *Context, args []string) ([]string, error) {
+			executionOrder = append(executionOrder, "before-exec")
+			return args, nil
+		}).
+		Capture().
+		AfterExec(func(_ *Context, _ *ExecResult) error {
+			executionOrder = append(executionOrder, "after-exec")
+			return nil
+		}).
+		Back()
+
+	err := app.RunWithArgs(context.Background(), []string{"echo", "test"})
+	if err != nil {
+		t.Fatalf("RunWithArgs failed: %v", err)
+	}
+
+	expected := []string{"before-exec", "after-exec"}
+	if len(executionOrder) != len(expected) {
+		t.Fatalf("Expected %d steps, got %d: %v", len(expected), len(executionOrder), executionOrder)
+	}
+
+	for i, step := range expected {
+		if executionOrder[i] != step {
+			t.Errorf("Step %d: expected %q, got %q", i, step, executionOrder[i])
+		}
+	}
+}
+
+// TestWrapperAfterExecWithFailedCommand tests AfterExec is called even when command fails
+func TestWrapperAfterExecWithFailedCommand(t *testing.T) {
+	var afterExecCalled bool
+	var resultExitCode int
+
+	app := New("test", "test wrapper")
+	app.Command("false", "wrap false").
+		Wrap("/bin/false").
+		Passthrough().
+		AfterExec(func(_ *Context, result *ExecResult) error {
+			afterExecCalled = true
+			resultExitCode = result.ExitCode
+			// Don't return error to allow inspection
+			return nil
+		}).
+		Back()
+
+	err := app.RunWithArgs(context.Background(), []string{"false"})
+
+	// Command should fail with exit code 1
+	if err == nil {
+		t.Fatal("Expected error from failed command")
+	}
+
+	if !afterExecCalled {
+		t.Error("AfterExec should have been called even when command fails")
+	}
+
+	if resultExitCode != 1 {
+		t.Errorf("Expected exit code 1 in AfterExec result, got %d", resultExitCode)
+	}
+}
+
+// TestWrapperBeforeExecArgModification tests argument modification in BeforeExec
+func TestWrapperBeforeExecArgModification(t *testing.T) {
+	var capturedOutput string
+
+	app := New("test", "test wrapper")
+	app.Command("echo", "wrap echo").
+		Wrap("/bin/echo").
+		ForwardArgs().
+		BeforeExec(func(_ *Context, _ []string) ([]string, error) {
+			// Replace all arguments
+			return []string{"modified", "args"}, nil
+		}).
+		Capture().
+		AfterExec(func(_ *Context, result *ExecResult) error {
+			capturedOutput = strings.TrimSpace(string(result.Stdout))
+			return nil
+		}).
+		Back()
+
+	err := app.RunWithArgs(context.Background(), []string{"echo", "original", "args"})
+	if err != nil {
+		t.Fatalf("RunWithArgs failed: %v", err)
+	}
+
+	if capturedOutput != "modified args" {
+		t.Errorf("Expected output 'modified args', got %q", capturedOutput)
+	}
+}

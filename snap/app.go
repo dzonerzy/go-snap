@@ -70,6 +70,9 @@ type App struct {
 
 	// Wrapper at app level (optional)
 	defaultWrapper *WrapperSpec
+
+	// Raw arguments as passed to RunWithArgs (before parsing)
+	rawArgs []string
 }
 
 // New creates a new CLI application with fluent API
@@ -276,7 +279,12 @@ func (a *App) RunContext(ctx context.Context) error {
 }
 
 // RunWithArgs runs the application with provided arguments
+//
+//nolint:gocognit,nestif,funlen // Main execution flow is inherently complex
 func (a *App) RunWithArgs(ctx context.Context, args []string) error {
+	// Store raw arguments before parsing for later access via Context.RawArgs()
+	a.rawArgs = args
+
 	// Windows: auto-enable Virtual Terminal (ANSI) when writing to a TTY, unless disabled
 	if runtime.GOOS == "windows" && a.IO().IsTTY() && os.Getenv("SNAP_DISABLE_VT") == "" {
 		_ = a.IO().EnableVirtualTerminal() // best-effort; ignore failure
@@ -337,6 +345,13 @@ func (a *App) RunWithArgs(ctx context.Context, args []string) error {
 	// Execute command action
 	var actionErr error
 	if result.Command != nil {
+		// Execute command-level Before hook
+		if result.Command.beforeAction != nil {
+			if beforeErr := result.Command.beforeAction(execCtx); beforeErr != nil {
+				return beforeErr
+			}
+		}
+
 		// Check command context: help vs action vs wrapper
 		switch {
 		case result.MustGetBool("help", false):
@@ -351,6 +366,16 @@ func (a *App) RunWithArgs(ctx context.Context, args []string) error {
 		default:
 			// No explicit action or wrapper: show the command help (especially when it has subcommands)
 			actionErr = a.showCommandHelp(result.Command)
+		}
+
+		// Execute command-level After hook
+		if result.Command.afterAction != nil {
+			if afterErr := result.Command.afterAction(execCtx); afterErr != nil {
+				// If action succeeded but after hook failed, return after error
+				if actionErr == nil {
+					actionErr = afterErr
+				}
+			}
 		}
 	} else {
 		// No command specified, check if app has a default wrapper
