@@ -20,6 +20,38 @@ Context API (`snap/context.go`)
 - IO: `IO()`, `Stdout()`, `Stderr()`, `Stdin()`
 - Exit helpers: `Exit(code)`, `ExitWithError(err, code)`, `ExitOnError(err)`
 - Wrapper result: `WrapperResult() (*ExecResult, bool)`
+- App metadata: `AppName()`, `AppVersion()`, `AppDescription()`, `AppAuthors()`
+
+App metadata access
+
+Use `AppName()`, `AppVersion()`, `AppDescription()`, and `AppAuthors()` to access application metadata from within actions:
+
+```go
+app := snap.New("myapp", "My awesome CLI tool").
+    Version("1.2.3").
+    Author("Alice", "alice@example.com")
+
+app.Command("version", "Show version information").
+    Action(func(ctx *snap.Context) error {
+        fmt.Fprintf(ctx.Stdout(), "%s v%s\n", ctx.AppName(), ctx.AppVersion())
+        
+        authors := ctx.AppAuthors()
+        if len(authors) > 0 {
+            fmt.Fprintf(ctx.Stdout(), "Authors:\n")
+            for _, author := range authors {
+                fmt.Fprintf(ctx.Stdout(), "  %s <%s>\n", author.Name, author.Email)
+            }
+        }
+        return nil
+    })
+```
+
+Output:
+```
+myapp v1.2.3
+Authors:
+  Alice <alice@example.com>
+```
 
 Help/version handling
 - Global `--help/--version` handled if enabled on app.
