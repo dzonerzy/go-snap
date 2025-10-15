@@ -591,7 +591,7 @@ func (a *App) addCommandHelpFlag(cmd *Command) {
 
 // showHelp displays comprehensive application help
 //
-//nolint:gocognit // Help rendering involves many small branches; splitting would harm readability.
+//nolint:gocognit,funlen // Help rendering involves many small branches; splitting would harm readability.
 func (a *App) showHelp() error {
 	// Application name and description
 	if a.description != "" {
