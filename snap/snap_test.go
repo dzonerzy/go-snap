@@ -865,3 +865,233 @@ func TestFromEnvGlobalFlags(t *testing.T) {
 		t.Errorf("Expected port=9000 from env, got %v", port)
 	}
 }
+
+// TestCommandBeforeAfterHooks tests command-level Before/After hooks
+func TestCommandBeforeAfterHooks(t *testing.T) {
+	var executionOrder []string
+
+	app := New("test", "Test app")
+	app.Before(func(ctx *Context) error {
+		executionOrder = append(executionOrder, "app-before")
+		return nil
+	})
+	app.After(func(ctx *Context) error {
+		executionOrder = append(executionOrder, "app-after")
+		return nil
+	})
+
+	app.Command("serve", "Start server").
+		Before(func(ctx *Context) error {
+			executionOrder = append(executionOrder, "command-before")
+			return nil
+		}).
+		Action(func(ctx *Context) error {
+			executionOrder = append(executionOrder, "action")
+			return nil
+		}).
+		After(func(ctx *Context) error {
+			executionOrder = append(executionOrder, "command-after")
+			return nil
+		})
+
+	err := app.RunWithArgs(context.Background(), []string{"serve"})
+	if err != nil {
+		t.Fatalf("RunWithArgs failed: %v", err)
+	}
+
+	expected := []string{"app-before", "command-before", "action", "command-after", "app-after"}
+	if len(executionOrder) != len(expected) {
+		t.Fatalf("Expected %d execution steps, got %d: %v", len(expected), len(executionOrder), executionOrder)
+	}
+
+	for i, step := range expected {
+		if executionOrder[i] != step {
+			t.Errorf("Step %d: expected %q, got %q", i, step, executionOrder[i])
+		}
+	}
+}
+
+// TestContextAppMetadata tests app metadata accessors in Context
+func TestContextAppMetadata(t *testing.T) {
+	app := New("myapp", "My application").
+		Version("1.2.3").
+		Author("Alice", "alice@example.com").
+		Author("Bob", "bob@example.com")
+
+	var capturedName string
+	var capturedVersion string
+	var capturedDescription string
+	var capturedAuthors []Author
+
+	app.Command("test", "Test command").
+		Action(func(ctx *Context) error {
+			capturedName = ctx.AppName()
+			capturedVersion = ctx.AppVersion()
+			capturedDescription = ctx.AppDescription()
+			capturedAuthors = ctx.AppAuthors()
+			return nil
+		})
+
+	err := app.RunWithArgs(context.Background(), []string{"test"})
+	if err != nil {
+		t.Fatalf("RunWithArgs failed: %v", err)
+	}
+
+	if capturedName != "myapp" {
+		t.Errorf("Expected app name 'myapp', got %q", capturedName)
+	}
+
+	if capturedVersion != "1.2.3" {
+		t.Errorf("Expected version '1.2.3', got %q", capturedVersion)
+	}
+
+	if capturedDescription != "My application" {
+		t.Errorf("Expected description 'My application', got %q", capturedDescription)
+	}
+
+	if len(capturedAuthors) != 2 {
+		t.Fatalf("Expected 2 authors, got %d", len(capturedAuthors))
+	}
+
+	if capturedAuthors[0].Name != "Alice" || capturedAuthors[0].Email != "alice@example.com" {
+		t.Errorf("Expected first author Alice <alice@example.com>, got %s <%s>",
+			capturedAuthors[0].Name, capturedAuthors[0].Email)
+	}
+
+	if capturedAuthors[1].Name != "Bob" || capturedAuthors[1].Email != "bob@example.com" {
+		t.Errorf("Expected second author Bob <bob@example.com>, got %s <%s>",
+			capturedAuthors[1].Name, capturedAuthors[1].Email)
+	}
+}
+
+// TestCommandBeforeError tests that Before hook errors stop execution
+func TestCommandBeforeError(t *testing.T) {
+	var executed bool
+
+	app := New("test", "Test app")
+	app.Command("serve", "Start server").
+		Before(func(ctx *Context) error {
+			return errors.New("before error")
+		}).
+		Action(func(ctx *Context) error {
+			executed = true
+			return nil
+		})
+
+	err := app.RunWithArgs(context.Background(), []string{"serve"})
+	if err == nil {
+		t.Fatal("Expected error from Before hook")
+	}
+
+	if err.Error() != "before error" {
+		t.Errorf("Expected 'before error', got %q", err.Error())
+	}
+
+	if executed {
+		t.Error("Action should not have been executed after Before error")
+	}
+}
+
+// TestCommandAfterError tests that After hook errors are returned
+func TestCommandAfterError(t *testing.T) {
+	var actionExecuted bool
+
+	app := New("test", "Test app")
+	app.Command("serve", "Start server").
+		Action(func(ctx *Context) error {
+			actionExecuted = true
+			return nil
+		}).
+		After(func(ctx *Context) error {
+			return errors.New("after error")
+		})
+
+	err := app.RunWithArgs(context.Background(), []string{"serve"})
+	if err == nil {
+		t.Fatal("Expected error from After hook")
+	}
+
+	if err.Error() != "after error" {
+		t.Errorf("Expected 'after error', got %q", err.Error())
+	}
+
+	if !actionExecuted {
+		t.Error("Action should have been executed before After hook")
+	}
+}
+
+// TestCommandAfterWithActionError tests that After runs even if Action fails
+func TestCommandAfterWithActionError(t *testing.T) {
+	var afterExecuted bool
+
+	app := New("test", "Test app")
+	app.Command("serve", "Start server").
+		Action(func(ctx *Context) error {
+			return errors.New("action error")
+		}).
+		After(func(ctx *Context) error {
+			afterExecuted = true
+			return nil
+		})
+
+	err := app.RunWithArgs(context.Background(), []string{"serve"})
+	if err == nil {
+		t.Fatal("Expected error from Action")
+	}
+
+	if err.Error() != "action error" {
+		t.Errorf("Expected 'action error', got %q", err.Error())
+	}
+
+	if !afterExecuted {
+		t.Error("After hook should have been executed even after Action error")
+	}
+}
+
+// TestNestedCommandBeforeAfter tests Before/After with nested subcommands
+func TestNestedCommandBeforeAfter(t *testing.T) {
+	var executionOrder []string
+
+	app := New("test", "Test app")
+
+	server := app.Command("server", "Server management").
+		Before(func(ctx *Context) error {
+			executionOrder = append(executionOrder, "server-before")
+			return nil
+		}).
+		After(func(ctx *Context) error {
+			executionOrder = append(executionOrder, "server-after")
+			return nil
+		})
+
+	server.Command("start", "Start server").
+		Before(func(ctx *Context) error {
+			executionOrder = append(executionOrder, "start-before")
+			return nil
+		}).
+		Action(func(ctx *Context) error {
+			executionOrder = append(executionOrder, "start-action")
+			return nil
+		}).
+		After(func(ctx *Context) error {
+			executionOrder = append(executionOrder, "start-after")
+			return nil
+		})
+
+	err := app.RunWithArgs(context.Background(), []string{"server", "start"})
+	if err != nil {
+		t.Fatalf("RunWithArgs failed: %v", err)
+	}
+
+	// Note: Only the deepest command's Before/After hooks are called
+	expected := []string{"start-before", "start-action", "start-after"}
+	if len(executionOrder) != len(expected) {
+		t.Fatalf("Expected %d execution steps, got %d: %v", len(expected), len(executionOrder), executionOrder)
+	}
+
+	for i, step := range expected {
+		if executionOrder[i] != step {
+			t.Errorf("Step %d: expected %q, got %q", i, step, executionOrder[i])
+		}
+	}
+}
