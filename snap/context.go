@@ -264,9 +264,20 @@ func (c *Context) Command() middleware.Command {
 	return c.Result.Command
 }
 
-// Args returns positional arguments
+// Args returns positional arguments (non-flag arguments after parsing)
 func (c *Context) Args() []string {
 	return c.Result.Args
+}
+
+// RawArgs returns the original unparsed arguments as passed to RunWithArgs.
+// This includes all flags, commands, and arguments before any parsing.
+// The binary name (os.Args[0]) is NOT included.
+//
+// Example: if invoked as "myapp --verbose serve --port 8080 file.txt"
+// RawArgs() returns ["--verbose", "serve", "--port", "8080", "file.txt"]
+// Args() returns ["file.txt"] (only positional args after parsing)
+func (c *Context) RawArgs() []string {
+	return c.App.rawArgs
 }
 
 // NArgs returns the number of positional arguments

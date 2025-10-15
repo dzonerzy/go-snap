@@ -70,6 +70,9 @@ type App struct {
 
 	// Wrapper at app level (optional)
 	defaultWrapper *WrapperSpec
+
+	// Raw arguments as passed to RunWithArgs (before parsing)
+	rawArgs []string
 }
 
 // New creates a new CLI application with fluent API
@@ -277,6 +280,9 @@ func (a *App) RunContext(ctx context.Context) error {
 
 // RunWithArgs runs the application with provided arguments
 func (a *App) RunWithArgs(ctx context.Context, args []string) error {
+	// Store raw arguments before parsing for later access via Context.RawArgs()
+	a.rawArgs = args
+
 	// Windows: auto-enable Virtual Terminal (ANSI) when writing to a TTY, unless disabled
 	if runtime.GOOS == "windows" && a.IO().IsTTY() && os.Getenv("SNAP_DISABLE_VT") == "" {
 		_ = a.IO().EnableVirtualTerminal() // best-effort; ignore failure
