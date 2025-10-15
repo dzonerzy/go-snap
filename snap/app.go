@@ -656,10 +656,24 @@ func (a *App) showHelp() error {
 				}
 			}
 		}
+
+		// Calculate max command name length for alignment
+		maxNameLen := 0
+		for _, name := range names {
+			if len(name) > maxNameLen {
+				maxNameLen = len(name)
+			}
+		}
+
 		for _, name := range names {
 			cmd := a.commands[name]
 			print("  ", name)
 			if cmd.Description() != "" {
+				// Add padding to align descriptions
+				padding := maxNameLen - len(name)
+				for i := 0; i < padding; i++ {
+					print(" ")
+				}
 				print("\t", cmd.Description())
 			}
 			if len(cmd.Aliases) > 0 {
