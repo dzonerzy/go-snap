@@ -964,6 +964,110 @@ func TestContextAppMetadata(t *testing.T) {
 	}
 }
 
+// TestContextRawArgs tests RawArgs functionality
+func TestContextRawArgs(t *testing.T) {
+	var capturedRawArgs []string
+	var capturedParsedArgs []string
+
+	app := New("myapp", "Test app")
+	app.BoolFlag("verbose", "Verbose output").Short('v').Global().Back()
+
+	app.Command("serve", "Start server").
+		IntFlag("port", "Port number").Default(8080).Back().
+		Action(func(ctx *Context) error {
+			capturedRawArgs = ctx.RawArgs()
+			capturedParsedArgs = ctx.Args()
+			return nil
+		})
+
+	// Invoke: myapp --verbose serve --port 9000 file1.txt file2.txt
+	args := []string{"--verbose", "serve", "--port", "9000", "file1.txt", "file2.txt"}
+	err := app.RunWithArgs(context.Background(), args)
+	if err != nil {
+		t.Fatalf("RunWithArgs failed: %v", err)
+	}
+
+	// RawArgs should contain ALL arguments as passed
+	expectedRaw := []string{"--verbose", "serve", "--port", "9000", "file1.txt", "file2.txt"}
+	if len(capturedRawArgs) != len(expectedRaw) {
+		t.Fatalf("Expected %d raw args, got %d: %v", len(expectedRaw), len(capturedRawArgs), capturedRawArgs)
+	}
+	for i, arg := range expectedRaw {
+		if capturedRawArgs[i] != arg {
+			t.Errorf("RawArgs[%d]: expected %q, got %q", i, arg, capturedRawArgs[i])
+		}
+	}
+
+	// Args() should contain only positional arguments (after parsing)
+	expectedParsed := []string{"file1.txt", "file2.txt"}
+	if len(capturedParsedArgs) != len(expectedParsed) {
+		t.Fatalf("Expected %d parsed args, got %d: %v", len(expectedParsed), len(capturedParsedArgs), capturedParsedArgs)
+	}
+	for i, arg := range expectedParsed {
+		if capturedParsedArgs[i] != arg {
+			t.Errorf("Args[%d]: expected %q, got %q", i, arg, capturedParsedArgs[i])
+		}
+	}
+}
+
+// TestContextRawArgsWithShortFlags tests RawArgs with combined short flags
+func TestContextRawArgsWithShortFlags(t *testing.T) {
+	var capturedRawArgs []string
+
+	app := New("myapp", "Test app")
+	app.BoolFlag("verbose", "Verbose").Short('v').Global().Back()
+	app.BoolFlag("debug", "Debug").Short('d').Global().Back()
+	app.BoolFlag("quiet", "Quiet").Short('q').Global().Back()
+
+	app.Command("test", "Test command").
+		Action(func(ctx *Context) error {
+			capturedRawArgs = ctx.RawArgs()
+			return nil
+		})
+
+	// Combined short flags: -vdq
+	args := []string{"-vdq", "test"}
+	err := app.RunWithArgs(context.Background(), args)
+	if err != nil {
+		t.Fatalf("RunWithArgs failed: %v", err)
+	}
+
+	// RawArgs should preserve the combined short flag exactly as typed
+	expectedRaw := []string{"-vdq", "test"}
+	if len(capturedRawArgs) != len(expectedRaw) {
+		t.Fatalf("Expected %d raw args, got %d: %v", len(expectedRaw), len(capturedRawArgs), capturedRawArgs)
+	}
+	for i, arg := range expectedRaw {
+		if capturedRawArgs[i] != arg {
+			t.Errorf("RawArgs[%d]: expected %q, got %q", i, arg, capturedRawArgs[i])
+		}
+	}
+}
+
+// TestContextRawArgsEmpty tests RawArgs with no arguments
+func TestContextRawArgsEmpty(t *testing.T) {
+	var capturedRawArgs []string
+
+	app := New("myapp", "Test app")
+	app.Command("test", "Test command").
+		Action(func(ctx *Context) error {
+			capturedRawArgs = ctx.RawArgs()
+			return nil
+		})
+
+	// No arguments except command name
+	err := app.RunWithArgs(context.Background(), []string{"test"})
+	if err != nil {
+		t.Fatalf("RunWithArgs failed: %v", err)
+	}
+
+	// RawArgs should contain just the command
+	expectedRaw := []string{"test"}
+	if len(capturedRawArgs) != len(expectedRaw) {
+		t.Errorf("Expected %d raw args, got %d: %v", len(expectedRaw), len(capturedRawArgs), capturedRawArgs)
+	}
+}
+
 // TestCommandBeforeError tests that Before hook errors stop execution
 func TestCommandBeforeError(t *testing.T) {
 	var executed bool
