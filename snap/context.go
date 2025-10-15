@@ -264,9 +264,20 @@ func (c *Context) Command() middleware.Command {
 	return c.Result.Command
 }
 
-// Args returns positional arguments
+// Args returns positional arguments (non-flag arguments after parsing)
 func (c *Context) Args() []string {
 	return c.Result.Args
+}
+
+// RawArgs returns the original unparsed arguments as passed to RunWithArgs.
+// This includes all flags, commands, and arguments before any parsing.
+// The binary name (os.Args[0]) is NOT included.
+//
+// Example: if invoked as "myapp --verbose serve --port 8080 file.txt"
+// RawArgs() returns ["--verbose", "serve", "--port", "8080", "file.txt"]
+// Args() returns ["file.txt"] (only positional args after parsing)
+func (c *Context) RawArgs() []string {
+	return c.App.rawArgs
 }
 
 // NArgs returns the number of positional arguments
@@ -291,4 +302,26 @@ func (c *Context) WrapperResult() (*ExecResult, bool) {
 		return r, true
 	}
 	return nil, false
+}
+
+// App metadata accessors
+
+// AppName returns the application name
+func (c *Context) AppName() string {
+	return c.App.name
+}
+
+// AppVersion returns the application version (empty string if not set)
+func (c *Context) AppVersion() string {
+	return c.App.version
+}
+
+// AppDescription returns the application description
+func (c *Context) AppDescription() string {
+	return c.App.description
+}
+
+// AppAuthors returns the list of application authors
+func (c *Context) AppAuthors() []Author {
+	return c.App.authors
 }
