@@ -409,7 +409,7 @@ func TestWrapperBeforeExecHook(t *testing.T) {
 	app.Command("echo", "wrap echo").
 		Wrap("/bin/echo").
 		ForwardArgs().
-		BeforeExec(func(ctx *Context, args []string) ([]string, error) {
+		BeforeExec(func(_ *Context, args []string) ([]string, error) {
 			capturedArgs = append([]string{}, args...)
 			// Prepend a prefix to the arguments
 			return append([]string{"[BEFORE]"}, args...), nil
@@ -446,7 +446,7 @@ func TestWrapperAfterExecHook(t *testing.T) {
 		Wrap("/bin/echo").
 		ForwardArgs().
 		Capture().
-		AfterExec(func(ctx *Context, result *ExecResult) error {
+		AfterExec(func(_ *Context, result *ExecResult) error {
 			capturedResult = result
 			return nil
 		}).
@@ -478,7 +478,7 @@ func TestWrapperBeforeExecError(t *testing.T) {
 	app.Command("echo", "wrap echo").
 		Wrap("/bin/echo").
 		ForwardArgs().
-		BeforeExec(func(ctx *Context, args []string) ([]string, error) {
+		BeforeExec(func(_ *Context, _ []string) ([]string, error) {
 			return nil, errors.New("before exec error")
 		}).
 		Passthrough().
@@ -500,7 +500,7 @@ func TestWrapperAfterExecError(t *testing.T) {
 	app.Command("true", "wrap true").
 		Wrap("/bin/true").
 		Passthrough().
-		AfterExec(func(ctx *Context, result *ExecResult) error {
+		AfterExec(func(_ *Context, _ *ExecResult) error {
 			return errors.New("after exec error")
 		}).
 		Back()
@@ -523,12 +523,12 @@ func TestWrapperBeforeAfterExecCombined(t *testing.T) {
 	app.Command("echo", "wrap echo").
 		Wrap("/bin/echo").
 		ForwardArgs().
-		BeforeExec(func(ctx *Context, args []string) ([]string, error) {
+		BeforeExec(func(_ *Context, args []string) ([]string, error) {
 			executionOrder = append(executionOrder, "before-exec")
 			return args, nil
 		}).
 		Capture().
-		AfterExec(func(ctx *Context, result *ExecResult) error {
+		AfterExec(func(_ *Context, _ *ExecResult) error {
 			executionOrder = append(executionOrder, "after-exec")
 			return nil
 		}).
@@ -560,7 +560,7 @@ func TestWrapperAfterExecWithFailedCommand(t *testing.T) {
 	app.Command("false", "wrap false").
 		Wrap("/bin/false").
 		Passthrough().
-		AfterExec(func(ctx *Context, result *ExecResult) error {
+		AfterExec(func(_ *Context, result *ExecResult) error {
 			afterExecCalled = true
 			resultExitCode = result.ExitCode
 			// Don't return error to allow inspection
@@ -592,12 +592,12 @@ func TestWrapperBeforeExecArgModification(t *testing.T) {
 	app.Command("echo", "wrap echo").
 		Wrap("/bin/echo").
 		ForwardArgs().
-		BeforeExec(func(ctx *Context, args []string) ([]string, error) {
+		BeforeExec(func(_ *Context, _ []string) ([]string, error) {
 			// Replace all arguments
 			return []string{"modified", "args"}, nil
 		}).
 		Capture().
-		AfterExec(func(ctx *Context, result *ExecResult) error {
+		AfterExec(func(_ *Context, result *ExecResult) error {
 			capturedOutput = strings.TrimSpace(string(result.Stdout))
 			return nil
 		}).

@@ -871,25 +871,25 @@ func TestCommandBeforeAfterHooks(t *testing.T) {
 	var executionOrder []string
 
 	app := New("test", "Test app")
-	app.Before(func(ctx *Context) error {
+	app.Before(func(_ *Context) error {
 		executionOrder = append(executionOrder, "app-before")
 		return nil
 	})
-	app.After(func(ctx *Context) error {
+	app.After(func(_ *Context) error {
 		executionOrder = append(executionOrder, "app-after")
 		return nil
 	})
 
 	app.Command("serve", "Start server").
-		Before(func(ctx *Context) error {
+		Before(func(_ *Context) error {
 			executionOrder = append(executionOrder, "command-before")
 			return nil
 		}).
-		Action(func(ctx *Context) error {
+		Action(func(_ *Context) error {
 			executionOrder = append(executionOrder, "action")
 			return nil
 		}).
-		After(func(ctx *Context) error {
+		After(func(_ *Context) error {
 			executionOrder = append(executionOrder, "command-after")
 			return nil
 		})
@@ -1001,7 +1001,12 @@ func TestContextRawArgs(t *testing.T) {
 	// Args() should contain only positional arguments (after parsing)
 	expectedParsed := []string{"file1.txt", "file2.txt"}
 	if len(capturedParsedArgs) != len(expectedParsed) {
-		t.Fatalf("Expected %d parsed args, got %d: %v", len(expectedParsed), len(capturedParsedArgs), capturedParsedArgs)
+		t.Fatalf(
+			"Expected %d parsed args, got %d: %v",
+			len(expectedParsed),
+			len(capturedParsedArgs),
+			capturedParsedArgs,
+		)
 	}
 	for i, arg := range expectedParsed {
 		if capturedParsedArgs[i] != arg {
@@ -1074,10 +1079,10 @@ func TestCommandBeforeError(t *testing.T) {
 
 	app := New("test", "Test app")
 	app.Command("serve", "Start server").
-		Before(func(ctx *Context) error {
+		Before(func(_ *Context) error {
 			return errors.New("before error")
 		}).
-		Action(func(ctx *Context) error {
+		Action(func(_ *Context) error {
 			executed = true
 			return nil
 		})
@@ -1102,11 +1107,11 @@ func TestCommandAfterError(t *testing.T) {
 
 	app := New("test", "Test app")
 	app.Command("serve", "Start server").
-		Action(func(ctx *Context) error {
+		Action(func(_ *Context) error {
 			actionExecuted = true
 			return nil
 		}).
-		After(func(ctx *Context) error {
+		After(func(_ *Context) error {
 			return errors.New("after error")
 		})
 
@@ -1130,10 +1135,10 @@ func TestCommandAfterWithActionError(t *testing.T) {
 
 	app := New("test", "Test app")
 	app.Command("serve", "Start server").
-		Action(func(ctx *Context) error {
+		Action(func(_ *Context) error {
 			return errors.New("action error")
 		}).
-		After(func(ctx *Context) error {
+		After(func(_ *Context) error {
 			afterExecuted = true
 			return nil
 		})
@@ -1159,25 +1164,25 @@ func TestNestedCommandBeforeAfter(t *testing.T) {
 	app := New("test", "Test app")
 
 	server := app.Command("server", "Server management").
-		Before(func(ctx *Context) error {
+		Before(func(_ *Context) error {
 			executionOrder = append(executionOrder, "server-before")
 			return nil
 		}).
-		After(func(ctx *Context) error {
+		After(func(_ *Context) error {
 			executionOrder = append(executionOrder, "server-after")
 			return nil
 		})
 
 	server.Command("start", "Start server").
-		Before(func(ctx *Context) error {
+		Before(func(_ *Context) error {
 			executionOrder = append(executionOrder, "start-before")
 			return nil
 		}).
-		Action(func(ctx *Context) error {
+		Action(func(_ *Context) error {
 			executionOrder = append(executionOrder, "start-action")
 			return nil
 		}).
-		After(func(ctx *Context) error {
+		After(func(_ *Context) error {
 			executionOrder = append(executionOrder, "start-after")
 			return nil
 		})
