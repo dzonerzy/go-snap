@@ -16,11 +16,42 @@ Context API (`snap/context.go`)
 - `Context()` / `Done()` / `Cancel()` / `Err()` – propagation and cancellation
 - `Set(key, val)`, `Get(key)` – metadata
 - Flag helpers mirror ParseResult: `String/Int/Bool/Duration/Float/Enum`, `StringSlice/IntSlice`, global variants
-- Positional args: `Args()`, `NArgs()`, `Arg(i)`
+- Positional args: `Args()`, `RawArgs()`, `NArgs()`, `Arg(i)`
 - IO: `IO()`, `Stdout()`, `Stderr()`, `Stdin()`
 - Exit helpers: `Exit(code)`, `ExitWithError(err, code)`, `ExitOnError(err)`
 - Wrapper result: `WrapperResult() (*ExecResult, bool)`
 - App metadata: `AppName()`, `AppVersion()`, `AppDescription()`, `AppAuthors()`
+
+Raw arguments access
+
+Use `RawArgs()` to access the original unparsed arguments as passed to the application, before any parsing occurs:
+
+```go
+app.Command("proxy", "Proxy command to another tool").
+    Action(func(ctx *snap.Context) error {
+        // RawArgs() returns all arguments before parsing
+        raw := ctx.RawArgs()
+        fmt.Printf("Original invocation: %s %s\n", ctx.AppName(), strings.Join(raw, " "))
+        
+        // Args() returns only positional arguments after parsing
+        positional := ctx.Args()
+        fmt.Printf("Positional args: %v\n", positional)
+        
+        return nil
+    })
+```
+
+Example invocation: `myapp --verbose proxy --port 8080 file1.txt file2.txt`
+- `RawArgs()` returns: `["--verbose", "proxy", "--port", "8080", "file1.txt", "file2.txt"]`
+- `Args()` returns: `["file1.txt", "file2.txt"]`
+
+Use cases:
+- **Audit logging**: Record the exact command as typed by the user
+- **Debugging**: See what was passed before parsing
+- **Proxying**: Forward the complete invocation to another tool
+- **Custom parsing**: Implement special syntax handling
+
+Note: `RawArgs()` does NOT include the binary name (`os.Args[0]`), only the arguments passed to `RunWithArgs()`.
 
 App metadata access
 
