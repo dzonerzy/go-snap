@@ -17,7 +17,7 @@
 - Documentation updated with comprehensive lifecycle hook examples and execution diagrams
 
 ### Fixed
-- None
+- Command descriptions now properly aligned in help output regardless of command name length
 
 ## [0.1.1] - 2025-09-25
 
