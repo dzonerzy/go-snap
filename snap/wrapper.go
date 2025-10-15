@@ -39,6 +39,8 @@ type WrapperSpec struct {
 	ForwardUnknown  bool // reserved for future raw-forward support
 	Transform       func(*Context, []string) ([]string, error)
 	TransformToolFn func(tool string, args []string) (string, []string, error)
+	BeforeExec      func(*Context, []string) ([]string, error) // Runs before exec with final args
+	AfterExec       func(*Context, *ExecResult) error          // Runs after exec with result
 	Mode            wrapperMode
 	TeeOut          io.Writer
 	TeeErr          io.Writer
@@ -167,6 +169,22 @@ func (b *WrapperBuilder[P]) ForwardUnknownFlags() *WrapperBuilder[P] {
 // TransformArgs provides full control over the final argv.
 func (b *WrapperBuilder[P]) TransformArgs(fn func(*Context, []string) ([]string, error)) *WrapperBuilder[P] {
 	b.spec.Transform = fn
+	return b
+}
+
+// BeforeExec sets a function to run before executing the wrapped binary.
+// The function receives the final arguments and can modify them.
+// This is called after all arg transformations (PreArgs, PostArgs, Transform, etc).
+func (b *WrapperBuilder[P]) BeforeExec(fn func(*Context, []string) ([]string, error)) *WrapperBuilder[P] {
+	b.spec.BeforeExec = fn
+	return b
+}
+
+// AfterExec sets a function to run after the wrapped binary execution completes.
+// The function receives the execution result and can inspect/process it.
+// This is useful for logging, notifications, cleanup, or custom error handling.
+func (b *WrapperBuilder[P]) AfterExec(fn func(*Context, *ExecResult) error) *WrapperBuilder[P] {
+	b.spec.AfterExec = fn
 	return b
 }
 
@@ -367,6 +385,15 @@ func (w *WrapperSpec) run(ctx *Context, _ []string) error {
 		}
 	}
 
+	// BeforeExec hook - final chance to modify args before execution
+	if w.BeforeExec != nil {
+		var err error
+		argv, err = w.BeforeExec(ctx, argv)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Prepare command
 	cmd := exec.CommandContext(ctx.Context(), bin, argv...)
 	if w.WorkingDir != "" {
@@ -417,15 +444,30 @@ func (w *WrapperSpec) run(ctx *Context, _ []string) error {
 		cmd.Stderr = errW
 		cmd.Stdin = ctx.Stdin()
 		runErr := cmd.Run()
+
+		// Build result
+		var res *ExecResult
 		if w.CaptureAlso {
-			res := &ExecResult{Stdout: outBuf.Bytes(), Stderr: errBuf.Bytes(), Error: runErr}
+			res = &ExecResult{Stdout: outBuf.Bytes(), Stderr: errBuf.Bytes(), Error: runErr}
 			if ee := toExitError(runErr); ee != nil {
 				res.ExitCode = ee.Code
-				ctx.Set("__wrapper_result__", res)
-				return ee
 			}
 			ctx.Set("__wrapper_result__", res)
+		} else {
+			// Create minimal result for AfterExec hook even without capture
+			res = &ExecResult{Error: runErr}
+			if ee := toExitError(runErr); ee != nil {
+				res.ExitCode = ee.Code
+			}
 		}
+
+		// AfterExec hook - process result after execution
+		if w.AfterExec != nil {
+			if afterErr := w.AfterExec(ctx, res); afterErr != nil {
+				return afterErr
+			}
+		}
+
 		if runErr != nil {
 			return toExitError(runErr)
 		}
@@ -440,11 +482,20 @@ func (w *WrapperSpec) run(ctx *Context, _ []string) error {
 		if ee := toExitError(err); ee != nil {
 			// Attach exit code
 			res.ExitCode = ee.Code
-			// Expose via context metadata for PostHook usage if needed
-			ctx.Set("__wrapper_result__", res)
-			return ee
 		}
+		// Expose via context metadata
 		ctx.Set("__wrapper_result__", res)
+
+		// AfterExec hook - process result after execution
+		if w.AfterExec != nil {
+			if afterErr := w.AfterExec(ctx, res); afterErr != nil {
+				return afterErr
+			}
+		}
+
+		if err != nil {
+			return toExitError(err)
+		}
 		return nil
 	default:
 		return NewError(ErrorTypeInternal, "invalid wrapper mode")
