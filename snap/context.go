@@ -292,3 +292,25 @@ func (c *Context) WrapperResult() (*ExecResult, bool) {
 	}
 	return nil, false
 }
+
+// App metadata accessors
+
+// AppName returns the application name
+func (c *Context) AppName() string {
+	return c.App.name
+}
+
+// AppVersion returns the application version (empty string if not set)
+func (c *Context) AppVersion() string {
+	return c.App.version
+}
+
+// AppDescription returns the application description
+func (c *Context) AppDescription() string {
+	return c.App.description
+}
+
+// AppAuthors returns the list of application authors
+func (c *Context) AppAuthors() []Author {
+	return c.App.authors
+}
