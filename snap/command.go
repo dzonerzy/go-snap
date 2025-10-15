@@ -8,18 +8,20 @@ import (
 
 // Command represents a CLI command or subcommand
 type Command struct {
-	name        string
-	description string
-	HelpText    string
-	Aliases     []string
-	Hidden      bool
-	flags       map[string]*Flag
-	shortFlags  map[rune]*Flag // O(1) lookup for short flags
-	subcommands map[string]*Command
-	flagGroups  []*FlagGroup // Flag groups for validation
-	Action      ActionFunc
-	middleware  []middleware.Middleware // Command-level middleware
-	wrapper     *WrapperSpec            // Optional wrapper configuration
+	name         string
+	description  string
+	HelpText     string
+	Aliases      []string
+	Hidden       bool
+	flags        map[string]*Flag
+	shortFlags   map[rune]*Flag // O(1) lookup for short flags
+	subcommands  map[string]*Command
+	flagGroups   []*FlagGroup // Flag groups for validation
+	Action       ActionFunc
+	beforeAction ActionFunc              // Runs before the action
+	afterAction  ActionFunc              // Runs after the action
+	middleware   []middleware.Middleware // Command-level middleware
+	wrapper      *WrapperSpec            // Optional wrapper configuration
 }
 
 // Name returns the command name (implements middleware.Command interface)
@@ -67,6 +69,18 @@ func (c *CommandBuilder) HelpText(help string) *CommandBuilder {
 // Use adds middleware to the command
 func (c *CommandBuilder) Use(middleware ...middleware.Middleware) *CommandBuilder {
 	c.command.middleware = append(c.command.middleware, middleware...)
+	return c
+}
+
+// Before sets a function to run before the command action
+func (c *CommandBuilder) Before(fn ActionFunc) *CommandBuilder {
+	c.command.beforeAction = fn
+	return c
+}
+
+// After sets a function to run after the command action
+func (c *CommandBuilder) After(fn ActionFunc) *CommandBuilder {
+	c.command.afterAction = fn
 	return c
 }
 
