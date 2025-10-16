@@ -22,6 +22,7 @@ const (
 	ErrorTypeMissingRequired    ErrorType = "missing_required"
 	ErrorTypePermission         ErrorType = "permission"
 	ErrorTypeValidation         ErrorType = "validation"
+	ErrorTypeInvalidArgument    ErrorType = "invalid_argument"
 )
 
 // ParseError represents parsing-specific errors (used by parser.go)
@@ -162,7 +163,8 @@ func (eh *ErrorHandler) ProcessError(err *CLIError, app *App) *CLIError {
 		// Flag group errors get contextual help
 		eh.addGroupContext(err, app)
 	case ErrorTypeInvalidFlag, ErrorTypeInvalidValue, ErrorTypeMissingValue,
-		ErrorTypeInternal, ErrorTypeMissingRequired, ErrorTypePermission, ErrorTypeValidation:
+		ErrorTypeInternal, ErrorTypeMissingRequired, ErrorTypePermission, ErrorTypeValidation,
+		ErrorTypeInvalidArgument:
 		// No suggestions for these by default.
 	}
 

@@ -402,14 +402,6 @@ func (c *Context) NArgs() int {
 	return len(c.Result.Args)
 }
 
-// Arg returns the positional argument at index i
-func (c *Context) Arg(i int) string {
-	if i >= 0 && i < len(c.Result.Args) {
-		return c.Result.Args[i]
-	}
-	return ""
-}
-
 // WrapperResult returns the last ExecResult produced by a wrapper when running
 // with Capture() or CaptureTo(). It returns (nil, false) if no result is
 // available.
