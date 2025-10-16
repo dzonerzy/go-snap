@@ -26,6 +26,22 @@ Project documentation lives in `docs/`.
 - [Quick Start](docs/quickstart.md)
 - [Full API and guides](docs/README.md)
 
+## Performance
+
+go-snap is **4-10x faster** than popular Go CLI libraries with **3x less memory** usage:
+
+| Library | Speed | Memory | Allocations |
+|---------|-------|--------|-------------|
+| **go-snap** | **1.7-2.0 μs** | **5-6 KB** | **33-35** |
+| Cobra | 7-9 μs | 17-20 KB | 119-149 |
+| urfave/cli | 8-21 μs | 8-16 KB | 254-595 |
+
+*Benchmarked on AMD Ryzen 9 9950X3D. See [benchmark/COMPETITIVE_BENCHMARKS.md](benchmark/COMPETITIVE_BENCHMARKS.md) for details.*
+
+**Migrating from another library?**
+- [Migration Guide: Cobra → go-snap](docs/migration-from-cobra.md)
+- [Migration Guide: urfave/cli → go-snap](docs/migration-from-urfave-cli.md)
+
 ## Install
 
 ```bash
