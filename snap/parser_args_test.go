@@ -266,7 +266,7 @@ func TestPositionalArgsInvalidType(t *testing.T) {
 
 // BenchmarkPositionalArgsZeroAlloc verifies zero allocations for positional arg parsing
 func BenchmarkPositionalArgsZeroAlloc(b *testing.B) {
-	app := New("test", "Test application").DisableHelp()
+	app := New("test", "Test application")
 	app.StringArg("name", "Name").Required()
 	app.IntArg("age", "Age").Required()
 	app.BoolArg("active", "Active").Default(true)
