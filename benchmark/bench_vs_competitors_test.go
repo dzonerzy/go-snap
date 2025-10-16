@@ -1,4 +1,4 @@
-package benchmark
+package benchmark_test
 
 import (
 	"context"
@@ -18,7 +18,7 @@ func BenchmarkSimpleCLI_GoSnap(b *testing.B) {
 	app.Command("run", "Run benchmark").
 		IntFlag("port", "Server port").Default(8080).Back().
 		BoolFlag("verbose", "Verbose output").Back().
-		Action(func(ctx *snap.Context) error { return nil })
+		Action(func(_ *snap.Context) error { return nil })
 
 	args := []string{"run", "--port", "9000", "--verbose"}
 	b.ReportAllocs()
@@ -38,7 +38,7 @@ func BenchmarkSimpleCLI_Cobra(b *testing.B) {
 		rootCmd := &cobra.Command{Use: "bench"}
 		runCmd := &cobra.Command{
 			Use: "run",
-			Run: func(cmd *cobra.Command, args []string) {},
+			Run: func(_ *cobra.Command, _ []string) {},
 		}
 		runCmd.Flags().IntP("port", "p", 8080, "Server port")
 		runCmd.Flags().BoolP("verbose", "v", false, "Verbose output")
@@ -63,7 +63,7 @@ func BenchmarkSimpleCLI_Urfave(b *testing.B) {
 						&cli.IntFlag{Name: "port", Value: 8080, Usage: "Server port"},
 						&cli.BoolFlag{Name: "verbose", Usage: "Verbose output"},
 					},
-					Action: func(c *cli.Context) error { return nil },
+					Action: func(_ *cli.Context) error { return nil },
 				},
 			},
 		}
@@ -80,7 +80,7 @@ func BenchmarkSubcommands_GoSnap(b *testing.B) {
 	app.Command("serve", "Start server").
 		IntFlag("port", "Server port").Default(8080).Back().
 		StringFlag("host", "Server host").Default("localhost").Back().
-		Action(func(ctx *snap.Context) error { return nil })
+		Action(func(_ *snap.Context) error { return nil })
 
 	args := []string{"--global", "serve", "--port", "9000", "--host", "0.0.0.0"}
 	b.ReportAllocs()
@@ -102,7 +102,7 @@ func BenchmarkSubcommands_Cobra(b *testing.B) {
 
 		serveCmd := &cobra.Command{
 			Use: "serve",
-			Run: func(cmd *cobra.Command, args []string) {},
+			Run: func(_ *cobra.Command, _ []string) {},
 		}
 		serveCmd.Flags().IntP("port", "p", 8080, "Server port")
 		serveCmd.Flags().String("host", "localhost", "Server host") // Removed -h shorthand to avoid conflict with help
@@ -131,7 +131,7 @@ func BenchmarkSubcommands_Urfave(b *testing.B) {
 						&cli.IntFlag{Name: "port", Value: 8080, Usage: "Server port"},
 						&cli.StringFlag{Name: "host", Value: "localhost", Usage: "Server host"},
 					},
-					Action: func(c *cli.Context) error { return nil },
+					Action: func(_ *cli.Context) error { return nil },
 				},
 			},
 		}
@@ -156,7 +156,7 @@ func BenchmarkManyFlags_GoSnap(b *testing.B) {
 		BoolFlag("debug", "Debug").Back().
 		BoolFlag("quiet", "Quiet").Back().
 		BoolFlag("force", "Force").Back().
-		Action(func(ctx *snap.Context) error { return nil })
+		Action(func(_ *snap.Context) error { return nil })
 
 	args := []string{
 		"run",
@@ -192,7 +192,7 @@ func BenchmarkManyFlags_Cobra(b *testing.B) {
 		rootCmd := &cobra.Command{Use: "bench"}
 		runCmd := &cobra.Command{
 			Use: "run",
-			Run: func(cmd *cobra.Command, args []string) {},
+			Run: func(_ *cobra.Command, _ []string) {},
 		}
 		runCmd.Flags().String("flag1", "value1", "Flag 1")
 		runCmd.Flags().String("flag2", "value2", "Flag 2")
@@ -241,7 +241,7 @@ func BenchmarkManyFlags_Urfave(b *testing.B) {
 						&cli.BoolFlag{Name: "quiet", Usage: "Quiet"},
 						&cli.BoolFlag{Name: "force", Usage: "Force"},
 					},
-					Action: func(c *cli.Context) error { return nil },
+					Action: func(_ *cli.Context) error { return nil },
 				},
 			},
 		}
@@ -256,7 +256,7 @@ func BenchmarkNestedCommands_GoSnap(b *testing.B) {
 	app := snap.New("bench", "benchmark app")
 	server := app.Command("server", "Server management")
 	server.Command("start", "Start server").
-		Action(func(ctx *snap.Context) error { return nil })
+		Action(func(_ *snap.Context) error { return nil })
 
 	args := []string{"server", "start"}
 	b.ReportAllocs()
@@ -277,7 +277,7 @@ func BenchmarkNestedCommands_Cobra(b *testing.B) {
 		serverCmd := &cobra.Command{Use: "server"}
 		startCmd := &cobra.Command{
 			Use: "start",
-			Run: func(cmd *cobra.Command, args []string) {},
+			Run: func(_ *cobra.Command, _ []string) {},
 		}
 		serverCmd.AddCommand(startCmd)
 		rootCmd.AddCommand(serverCmd)
@@ -300,7 +300,7 @@ func BenchmarkNestedCommands_Urfave(b *testing.B) {
 					Subcommands: []*cli.Command{
 						{
 							Name:   "start",
-							Action: func(c *cli.Context) error { return nil },
+							Action: func(_ *cli.Context) error { return nil },
 						},
 					},
 				},
