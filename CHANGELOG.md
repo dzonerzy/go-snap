@@ -1,5 +1,49 @@
 # Changelog
 
+## [Unreleased] - v0.2.0
+
+### Added
+- **Type-safe positional arguments** with `StringArg()`, `IntArg()`, `BoolArg()`, `FloatArg()`, `DurationArg()`
+  * Incremental declaration: first arg is position 0, second is position 1, etc.
+  * Support at both app-level and command-level
+  * Required vs optional arguments with `.Required()` and `.Default(value)`
+  * Access via `ctx.String("argname")`, `ctx.MustString("argname", default)` (same pattern as flags)
+  * Automatic type conversion and validation
+  * Help text integration: displays `<required>` and `[optional]` args in usage
+  * Validation: enforces required arg count before action execution
+  * Example: `app.StringArg("filename", "Input file").Required().IntArg("count", "Number of items").Default(10)`
+
+- **Variadic positional arguments** with `StringSliceArg().Variadic()`
+  * Collect multiple values for the last positional argument
+  * Type-safe: `ctx.StringSlice("files")` returns `[]string`
+  * Can be required (1+ items) or optional with default (0+ items)
+  * Help shows as `<files>...` for required or `[files]...` for optional
+  * Only last argument can be variadic
+  * Example: `app.Command("rm").StringSliceArg("files", "Files to remove").Required().Variadic()`
+  * Use cases: `rm file1 file2 file3`, `tar -czf out.tar file1 file2 file3`
+
+- **Rest arguments** with `RestArgs()` for pass-through scenarios
+  * Captures all remaining arguments after declared positional args as raw strings
+  * Access via `ctx.RestArgs()` or `ctx.Args()` (returns `[]string`)
+  * No validation or type conversion - raw pass-through
+  * Ideal for docker-style commands or forwarding to wrapped binaries
+  * Cannot combine with `.Variadic()` - choose one approach
+  * Example: `app.Command("run").StringArg("script", "Script").Required().RestArgs()`
+  * Use cases: `docker run image cmd args...`, `go run main.go args...`
+
+- Context methods for positional arguments:
+  * `ctx.Arg(index)` - Get raw positional arg by index
+  * `ctx.RestArgs()` - Get all remaining args when using `RestArgs()`
+  * Existing `ctx.Args()` now returns only unparsed positional args (after named args consumed)
+
+### Changed
+- Help output now displays positional arguments in usage line:
+  * Named args: `myapp <filename> [count]`
+  * Variadic args: `myapp rm <files>...`
+  * Rest args: `myapp run <script> [args...]`
+- Parser validates positional argument count against declared requirements
+- `ctx.Args()` behavior: returns remaining positional args after named args are consumed
+
 ## [0.1.3] - 2025-10-16
 
 ### Added
