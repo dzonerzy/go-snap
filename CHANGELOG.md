@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.1.3] - 2025-10-16
+
+### Added
+- `WrapMany()` method for executing multiple binaries with same arguments
+- `Parallel()` method for concurrent execution of multiple binaries (default: sequential)
+- `StopOnError()` method to control error handling (default: stop on first error)
+- `CurrentBinary()` and `Binaries()` Context methods for accessing binary information in WrapMany
+- New example: `examples/multi-go-build` demonstrating multi-version builds
+- Competitive benchmarks comparing go-snap vs Cobra vs urfave/cli
+  * 4-10x faster execution (4.9x vs Cobra, 6.7x vs urfave/cli average)
+  * 3-3.4x less memory usage
+  * 3.6-17x fewer allocations
+- Benchmark documentation: `benchmark/COMPETITIVE_BENCHMARKS.md` with detailed analysis
+
+### Fixed
+- Flag descriptions now properly aligned in help output regardless of flag name and option lengths
+
+### Changed
+- Modernized for loops to use `range` over int syntax (Go 1.22+)
+
 ## [0.1.2] - 2025-10-16
 
 ### Added

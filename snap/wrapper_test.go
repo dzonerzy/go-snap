@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -610,5 +611,193 @@ func TestWrapperBeforeExecArgModification(t *testing.T) {
 
 	if capturedOutput != "modified args" {
 		t.Errorf("Expected output 'modified args', got %q", capturedOutput)
+	}
+}
+
+// TestWrapManySequential tests sequential execution of multiple binaries
+func TestWrapManySequential(t *testing.T) {
+	var executionOrder []string
+	var mu sync.Mutex
+
+	app := New("test", "test wrapper")
+	app.Command("multi", "run multiple").
+		WrapMany("/bin/echo", "/bin/true", "/bin/false").
+		StopOnError(false). // continue even if one fails
+		AfterExec(func(ctx *Context, _ *ExecResult) error {
+			mu.Lock()
+			binary := ctx.CurrentBinary()
+			executionOrder = append(executionOrder, binary)
+			mu.Unlock()
+			return nil
+		}).
+		Back()
+
+	err := app.RunWithArgs(context.Background(), []string{"multi"})
+	if err != nil {
+		t.Fatalf("RunWithArgs failed: %v", err)
+	}
+
+	// Verify all three executed in order
+	if len(executionOrder) != 3 {
+		t.Errorf("Expected 3 executions, got %d", len(executionOrder))
+	}
+	if executionOrder[0] != "/bin/echo" || executionOrder[1] != "/bin/true" || executionOrder[2] != "/bin/false" {
+		t.Errorf("Unexpected execution order: %v", executionOrder)
+	}
+}
+
+// TestWrapManyStopOnError tests that execution stops on first error by default
+func TestWrapManyStopOnError(t *testing.T) {
+	var executed []string
+	var mu sync.Mutex
+
+	app := New("test", "test wrapper")
+	app.Command("multi", "run multiple").
+		WrapMany("/bin/false", "/bin/true", "/bin/echo").
+		// StopOnError is true by default
+		AfterExec(func(ctx *Context, _ *ExecResult) error {
+			mu.Lock()
+			binary := ctx.CurrentBinary()
+			executed = append(executed, binary)
+			mu.Unlock()
+			return nil
+		}).
+		Back()
+
+	err := app.RunWithArgs(context.Background(), []string{"multi"})
+	if err == nil {
+		t.Fatal("Expected error from /bin/false")
+	}
+
+	// Should only execute first binary since it fails
+	if len(executed) != 1 {
+		t.Errorf("Expected 1 execution (stopped on error), got %d: %v", len(executed), executed)
+	}
+	if executed[0] != "/bin/false" {
+		t.Errorf("Expected /bin/false, got %s", executed[0])
+	}
+}
+
+// TestWrapManyContinueOnError tests that execution continues when StopOnError(false)
+func TestWrapManyContinueOnError(t *testing.T) {
+	var executed []string
+	var mu sync.Mutex
+
+	app := New("test", "test wrapper")
+	app.Command("multi", "run multiple").
+		WrapMany("/bin/false", "/bin/true", "/bin/echo").
+		StopOnError(false).
+		AfterExec(func(ctx *Context, _ *ExecResult) error {
+			mu.Lock()
+			binary := ctx.CurrentBinary()
+			executed = append(executed, binary)
+			mu.Unlock()
+			return nil
+		}).
+		Back()
+
+	err := app.RunWithArgs(context.Background(), []string{"multi"})
+	if err != nil {
+		t.Fatalf("Should not error with StopOnError(false): %v", err)
+	}
+
+	// Should execute all three even though first fails
+	if len(executed) != 3 {
+		t.Errorf("Expected 3 executions, got %d: %v", len(executed), executed)
+	}
+}
+
+// TestWrapManyContextAccessors tests CurrentBinary() and Binaries()
+func TestWrapManyContextAccessors(t *testing.T) {
+	var capturedBinary string
+	var capturedBinaries []string
+
+	app := New("test", "test wrapper")
+	app.Command("multi", "run multiple").
+		WrapMany("go1.21", "go1.22").
+		AfterExec(func(ctx *Context, _ *ExecResult) error {
+			if capturedBinary == "" {
+				capturedBinary = ctx.CurrentBinary()
+				capturedBinaries = ctx.Binaries()
+			}
+			return nil
+		}).
+		Back()
+
+	// This will fail since go1.21/go1.22 don't exist, but that's ok for this test
+	_ = app.RunWithArgs(context.Background(), []string{"multi"})
+
+	if capturedBinary != "go1.21" {
+		t.Errorf("Expected current binary 'go1.21', got %q", capturedBinary)
+	}
+
+	if len(capturedBinaries) != 2 || capturedBinaries[0] != "go1.21" || capturedBinaries[1] != "go1.22" {
+		t.Errorf("Expected binaries [go1.21 go1.22], got %v", capturedBinaries)
+	}
+}
+
+// TestWrapManyParallel tests parallel execution of multiple binaries
+func TestWrapManyParallel(t *testing.T) {
+	var executed sync.Map
+
+	app := New("test", "test wrapper")
+	app.Command("multi", "run multiple").
+		WrapMany("/bin/echo", "/bin/true", "/bin/sleep").
+		Parallel().
+		StopOnError(false).
+		AfterExec(func(ctx *Context, _ *ExecResult) error {
+			binary := ctx.CurrentBinary()
+			executed.Store(binary, true)
+			return nil
+		}).
+		Back()
+
+	err := app.RunWithArgs(context.Background(), []string{"multi", "0.01"})
+	if err != nil {
+		t.Fatalf("RunWithArgs failed: %v", err)
+	}
+
+	// Verify all three executed
+	count := 0
+	executed.Range(func(_, _ any) bool {
+		count++
+		return true
+	})
+
+	if count != 3 {
+		t.Errorf("Expected 3 parallel executions, got %d", count)
+	}
+}
+
+// TestWrapManyParallelStopOnError tests parallel execution with error
+func TestWrapManyParallelStopOnError(t *testing.T) {
+	var executed sync.Map
+
+	app := New("test", "test wrapper")
+	app.Command("multi", "run multiple").
+		WrapMany("/bin/false", "/bin/true", "/bin/echo").
+		Parallel().
+		// StopOnError defaults to true, but all goroutines complete
+		AfterExec(func(ctx *Context, _ *ExecResult) error {
+			binary := ctx.CurrentBinary()
+			executed.Store(binary, true)
+			return nil
+		}).
+		Back()
+
+	err := app.RunWithArgs(context.Background(), []string{"multi"})
+	if err == nil {
+		t.Fatal("Expected error from /bin/false")
+	}
+
+	// All should execute (parallel), but first error should be returned
+	count := 0
+	executed.Range(func(_, _ any) bool {
+		count++
+		return true
+	})
+
+	if count != 3 {
+		t.Errorf("Expected all 3 to execute in parallel, got %d", count)
 	}
 }

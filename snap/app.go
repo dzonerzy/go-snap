@@ -671,7 +671,7 @@ func (a *App) showHelp() error {
 			if cmd.Description() != "" {
 				// Add padding to align descriptions
 				padding := maxNameLen - len(name)
-				for i := 0; i < padding; i++ {
+				for range padding {
 					print(" ")
 				}
 				print("\t", cmd.Description())
@@ -697,6 +697,18 @@ func (a *App) showHelp() error {
 	return nil
 }
 
+// flagDisplayWidth calculates the width of the flag display string (before description)
+func flagDisplayWidth(flag *Flag) int {
+	width := 2 + len(flag.Name) // "  --" + name
+	if flag.Short != 0 {
+		width += 4 // ", -X"
+	}
+	if flag.Type != FlagTypeBool {
+		width += 6 // " value"
+	}
+	return width
+}
+
 // showOrganizedFlags displays flags organized by groups
 //
 //nolint:gocognit // Structured flag rendering across groups/types is intentionally verbose.
@@ -719,6 +731,17 @@ func (a *App) showOrganizedFlags() {
 		}
 	}
 
+	// Calculate max flag display width across all visible flags
+	maxWidth := 0
+	for _, flag := range a.flags {
+		if !flag.Hidden {
+			width := flagDisplayWidth(flag)
+			if width > maxWidth {
+				maxWidth = width
+			}
+		}
+	}
+
 	// Sort groups by name for deterministic output
 	groups := append(make([]*FlagGroup, 0, len(a.flagGroups)), a.flagGroups...)
 	for i := 0; i < len(groups); i++ {
@@ -730,6 +753,7 @@ func (a *App) showOrganizedFlags() {
 	}
 
 	// Show flag groups first (sorted)
+	//nolint:dupl // Similar to command flag rendering but operates on app-level flags
 	for _, group := range groups {
 		println()
 		if group.Description != "" {
@@ -753,7 +777,7 @@ func (a *App) showOrganizedFlags() {
 			}
 		}
 		for _, name := range names {
-			a.showFlag(a.flags[name])
+			a.showFlag(a.flags[name], maxWidth)
 		}
 
 		// Show constraint info
@@ -785,13 +809,13 @@ func (a *App) showOrganizedFlags() {
 			}
 		}
 		for _, n := range names {
-			a.showFlag(ungroupedFlags[n])
+			a.showFlag(ungroupedFlags[n], maxWidth)
 		}
 	}
 }
 
 // showFlag displays a single flag with both long and short forms
-func (a *App) showFlag(flag *Flag) {
+func (a *App) showFlag(flag *Flag, maxWidth int) {
 	print("  --", flag.Name)
 
 	// Show short form if available
@@ -802,6 +826,13 @@ func (a *App) showFlag(flag *Flag) {
 	// Show value type for non-boolean flags
 	if flag.Type != FlagTypeBool {
 		print(" value")
+	}
+
+	// Add padding to align descriptions
+	currentWidth := flagDisplayWidth(flag)
+	padding := maxWidth - currentWidth
+	for range padding {
+		print(" ")
 	}
 
 	// Show description
@@ -975,6 +1006,17 @@ func (a *App) showOrganizedCommandFlags(cmd *Command) {
 		return
 	}
 
+	// Calculate max flag display width across all visible command flags
+	maxWidth := 0
+	for _, flag := range cmd.flags {
+		if !flag.Hidden {
+			width := flagDisplayWidth(flag)
+			if width > maxWidth {
+				maxWidth = width
+			}
+		}
+	}
+
 	// Track flags that are in groups
 	grouped := make(map[string]bool)
 	for _, g := range cmd.flagGroups {
@@ -984,6 +1026,7 @@ func (a *App) showOrganizedCommandFlags(cmd *Command) {
 	}
 
 	// Print groups
+	//nolint:dupl // Similar to app flag rendering but operates on command-level flags
 	for _, g := range cmd.flagGroups {
 		println()
 		if g.Description != "" {
@@ -1007,7 +1050,7 @@ func (a *App) showOrganizedCommandFlags(cmd *Command) {
 			}
 		}
 		for _, name := range names {
-			a.showFlag(cmd.flags[name])
+			a.showFlag(cmd.flags[name], maxWidth)
 		}
 		constraintDesc := a.formatGroupConstraint(g.Constraint)
 		if constraintDesc != "" {
@@ -1034,7 +1077,7 @@ func (a *App) showOrganizedCommandFlags(cmd *Command) {
 		println()
 		println("Flags:")
 		for _, name := range ungrouped {
-			a.showFlag(cmd.flags[name])
+			a.showFlag(cmd.flags[name], maxWidth)
 		}
 	}
 }

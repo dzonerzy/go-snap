@@ -126,11 +126,102 @@ app.Wrap("flaky-tool").
     Back()
 ```
 
+## Multiple Binaries with WrapMany
+
+The `WrapMany()` method allows executing multiple binaries with the same arguments, useful for testing across multiple tool versions:
+
+```go
+app.Command("build", "Build with multiple Go versions").
+    WrapMany("go1.21.0", "go1.22.0", "go1.23.0").
+    InjectArgsPre("build").
+    ForwardArgs().
+    StopOnError(false). // Continue even if one fails
+    AfterExec(func(ctx *snap.Context, result *snap.ExecResult) error {
+        binary := ctx.CurrentBinary()
+        fmt.Printf("[%s] Exit code: %d\n", binary, result.ExitCode)
+        return nil
+    }).
+    Back()
+```
+
+### Execution Modes
+
+**Sequential (default)**: Binaries execute one after another
+```go
+WrapMany("go1.21", "go1.22", "go1.23") // Sequential
+```
+
+**Parallel**: All binaries execute concurrently
+```go
+WrapMany("go1.21", "go1.22", "go1.23").
+    Parallel() // Concurrent execution
+```
+
+### Error Handling
+
+**StopOnError (default: true)**: Stop on first error
+```go
+WrapMany("go1.21", "go1.22", "go1.23")
+// Stops if go1.21 fails
+```
+
+**Continue on error**: Execute all binaries even if some fail
+```go
+WrapMany("go1.21", "go1.22", "go1.23").
+    StopOnError(false) // Execute all regardless of failures
+```
+
+### Context Accessors
+
+Inside `AfterExec`, access binary information:
+- `ctx.CurrentBinary()` - Returns the binary currently being executed
+- `ctx.Binaries()` - Returns all binaries in the list
+
+### Complete Example
+
+```go
+var successCount, failCount int
+var mu sync.Mutex
+
+app.Command("test-all", "Test with multiple Go versions").
+    WrapMany("go1.21.0", "go1.22.0", "go1.23.0").
+    Parallel().
+    InjectArgsPre("test", "./...").
+    StopOnError(false).
+    Capture().
+    AfterExec(func(ctx *snap.Context, result *snap.ExecResult) error {
+        binary := ctx.CurrentBinary()
+        
+        mu.Lock()
+        defer mu.Unlock()
+        
+        if result.ExitCode == 0 {
+            successCount++
+            fmt.Printf("✓ %s: PASS\n", binary)
+        } else {
+            failCount++
+            fmt.Printf("✗ %s: FAIL\n", binary)
+            fmt.Printf("  %s\n", result.Stderr)
+        }
+        return nil
+    }).
+    Back()
+```
+
+### Hook Behavior with WrapMany
+
+- `BeforeExec` runs **once** before all executions (can modify args globally)
+- `AfterExec` runs **once per binary** (receives individual results)
+- In parallel mode, `AfterExec` may be called concurrently - use synchronization if needed
+
+See `examples/multi-go-build` for a complete working example.
+
 Notes
 - When an app-level wrapper is present, unknown top-level tokens are treated as positional args and forwarded if `ForwardUnknownFlags()` is enabled.
 - Unknown flags/short flags inside a wrapped command can be forwarded similarly.
 - `BeforeExec` is called after `Transform` but is more explicit about its purpose (final pre-execution hook).
 - In `Passthrough` mode without `CaptureTo`, `AfterExec` still receives a minimal `ExecResult` with `ExitCode` and `Error`.
+- With `WrapMany`, each binary receives the same arguments - use context metadata to track per-binary state if needed.
 
 Related
 - [Parsing & Context](./parsing-and-context.md)

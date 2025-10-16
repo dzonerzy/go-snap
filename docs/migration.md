@@ -2,12 +2,21 @@
 
 This guide helps migrate common patterns from Cobra and urfave/cli to go-snap.
 
-Key differences
+## Comprehensive Migration Guides
+
+For detailed, step-by-step migration instructions with complete examples:
+
+- **[Migration Guide: Cobra → go-snap](./migration-from-cobra.md)** - Complete guide with side-by-side comparisons, performance benefits (4-10x faster), and migration checklist
+- **[Migration Guide: urfave/cli → go-snap](./migration-from-urfave-cli.md)** - Detailed urfave/cli v2 migration with examples and common pitfalls
+
+## Key Differences
+
 - Typed, fluent builders (no stringly-typed flag values)
 - Native flag grouping and constraint validation
 - Smart errors and edit-distance suggestions
 - Config precedence (defaults/file/env/flags) and auto-flag generation
 - Minimal, focused middleware set
+- **4-10x faster performance** with 3x less memory usage
 
 From Cobra
 ```go
