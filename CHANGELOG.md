@@ -2,8 +2,18 @@
 
 ## [0.1.3] - 2025-10-16
 
+### Added
+- `WrapMany()` method for executing multiple binaries with same arguments
+- `Parallel()` method for concurrent execution of multiple binaries (default: sequential)
+- `StopOnError()` method to control error handling (default: stop on first error)
+- `CurrentBinary()` and `Binaries()` Context methods for accessing binary information in WrapMany
+- New example: `examples/multi-go-build` demonstrating multi-version builds
+
 ### Fixed
 - Flag descriptions now properly aligned in help output regardless of flag name and option lengths
+
+### Changed
+- Modernized for loops to use `range` over int syntax (Go 1.22+)
 
 ## [0.1.2] - 2025-10-16
 
