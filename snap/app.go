@@ -671,7 +671,7 @@ func (a *App) showHelp() error {
 			if cmd.Description() != "" {
 				// Add padding to align descriptions
 				padding := maxNameLen - len(name)
-				for i := 0; i < padding; i++ {
+				for range padding {
 					print(" ")
 				}
 				print("\t", cmd.Description())
@@ -831,7 +831,7 @@ func (a *App) showFlag(flag *Flag, maxWidth int) {
 	// Add padding to align descriptions
 	currentWidth := flagDisplayWidth(flag)
 	padding := maxWidth - currentWidth
-	for i := 0; i < padding; i++ {
+	for range padding {
 		print(" ")
 	}
 
