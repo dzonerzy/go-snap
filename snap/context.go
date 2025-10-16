@@ -11,12 +11,14 @@ import (
 
 // Context provides execution context and lifecycle management
 type Context struct {
-	App      *App
-	Result   *ParseResult
-	ctx      context.Context
-	parent   *Context
-	cancel   context.CancelFunc
-	metadata map[string]any
+	App           *App
+	Result        *ParseResult
+	ctx           context.Context
+	parent        *Context
+	cancel        context.CancelFunc
+	metadata      map[string]any
+	currentBinary string   // Current binary being executed (for WrapMany)
+	binaries      []string // All binaries in WrapMany execution
 }
 
 // Context methods for accessing the underlying Go context
@@ -278,6 +280,34 @@ func (c *Context) Args() []string {
 // Args() returns ["file.txt"] (only positional args after parsing)
 func (c *Context) RawArgs() []string {
 	return c.App.rawArgs
+}
+
+// CurrentBinary returns the binary currently being executed in a WrapMany() scenario.
+// Returns empty string for single Wrap() or if not in a wrapper execution.
+//
+// Example:
+//
+//	app.Command("build").WrapMany("go1.21", "go1.22").
+//	    AfterExec(func(ctx *Context, result *ExecResult) error {
+//	        binary := ctx.CurrentBinary() // "go1.21" or "go1.22"
+//	        return nil
+//	    })
+func (c *Context) CurrentBinary() string {
+	return c.currentBinary
+}
+
+// Binaries returns all binaries configured in WrapMany().
+// Returns nil for single Wrap() configurations.
+//
+// Example:
+//
+//	app.Command("build").WrapMany("go1.21", "go1.22", "go1.23").
+//	    AfterExec(func(ctx *Context, result *ExecResult) error {
+//	        binaries := ctx.Binaries() // ["go1.21", "go1.22", "go1.23"]
+//	        return nil
+//	    })
+func (c *Context) Binaries() []string {
+	return c.binaries
 }
 
 // NArgs returns the number of positional arguments

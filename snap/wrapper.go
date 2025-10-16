@@ -29,6 +29,7 @@ const (
 // WrapperSpec captures the configured behavior for a wrapper
 type WrapperSpec struct {
 	Binary          string
+	Binaries        []string // Multiple binaries for WrapMany (mutually exclusive with Binary)
 	DiscoverOnPATH  bool
 	WorkingDir      string
 	Env             map[string]string
@@ -46,6 +47,8 @@ type WrapperSpec struct {
 	TeeErr          io.Writer
 	CaptureAlso     bool // when true in passthrough, also capture into ExecResult
 	Dynamic         bool // reserved for toolexec dynamic shim
+	Parallel        bool // Execute binaries in parallel (WrapMany only)
+	StopOnError     bool // Stop execution if one binary fails (WrapMany only, default: true)
 	// DSL helpers
 	LeadingFlags []string
 	AfterLeading []string
@@ -85,6 +88,36 @@ func (c *CommandBuilder) Wrap(binary string) *WrapperBuilder[*CommandBuilder] {
 		ForwardArgs:    true,
 		Mode:           modePassthrough,
 		Env:            make(map[string]string),
+		StopOnError:    true, // default: stop on first error
+	}
+	c.command.wrapper = spec
+	return &WrapperBuilder[*CommandBuilder]{parent: c, spec: spec, cmd: c.command}
+}
+
+// WrapMany configures a command-level wrapper that executes multiple binaries
+// sequentially (or in parallel with .Parallel()). Each binary receives the same
+// arguments. AfterExec hook is called once per binary execution.
+//
+// Example:
+//
+//	app.Command("build", "Build with multiple Go versions").
+//	    WrapMany("go1.21", "go1.22", "go1.23").
+//	    InjectArgsPre("build").
+//	    ForwardArgs().
+//	    AfterExec(func(ctx *snap.Context, result *snap.ExecResult) error {
+//	        binary := ctx.CurrentBinary()
+//	        fmt.Printf("[%s] Exit: %d\n", binary, result.ExitCode)
+//	        return nil
+//	    })
+func (c *CommandBuilder) WrapMany(binaries ...string) *WrapperBuilder[*CommandBuilder] {
+	spec := &WrapperSpec{
+		Binaries:       binaries,
+		DiscoverOnPATH: true,
+		InheritEnv:     true,
+		ForwardArgs:    true,
+		Mode:           modePassthrough,
+		Env:            make(map[string]string),
+		StopOnError:    true, // default: stop on first error
 	}
 	c.command.wrapper = spec
 	return &WrapperBuilder[*CommandBuilder]{parent: c, spec: spec, cmd: c.command}
@@ -185,6 +218,21 @@ func (b *WrapperBuilder[P]) BeforeExec(fn func(*Context, []string) ([]string, er
 // This is useful for logging, notifications, cleanup, or custom error handling.
 func (b *WrapperBuilder[P]) AfterExec(fn func(*Context, *ExecResult) error) *WrapperBuilder[P] {
 	b.spec.AfterExec = fn
+	return b
+}
+
+// Parallel enables parallel execution for WrapMany(). By default, binaries are
+// executed sequentially. When enabled, all binaries run concurrently.
+func (b *WrapperBuilder[P]) Parallel() *WrapperBuilder[P] {
+	b.spec.Parallel = true
+	return b
+}
+
+// StopOnError controls whether execution stops on the first error (default: true).
+// When set to false, all binaries will be executed even if some fail.
+// Only applicable for WrapMany().
+func (b *WrapperBuilder[P]) StopOnError(stop bool) *WrapperBuilder[P] {
+	b.spec.StopOnError = stop
 	return b
 }
 
@@ -313,11 +361,19 @@ func (b *WrapperBuilder[P]) MapBoolFlag(wrapperFlag string, childTokens ...strin
 }
 
 // run executes the wrapper with the given context and original args slice.
-//
-//nolint:gocognit,gocyclo,cyclop,funlen // Wrapper execution covers resolution, arg building, env, and IO wiring.
 func (w *WrapperSpec) run(ctx *Context, _ []string) error {
+	// Handle WrapMany - multiple binaries
+	if len(w.Binaries) > 0 {
+		return w.runMany(ctx)
+	}
+
+	// Handle single Wrap - existing logic
+	return w.runSingle(ctx, w.Binary)
+}
+
+//nolint:gocognit,gocyclo,cyclop,funlen // Wrapper execution covers resolution, arg building, env, and IO wiring.
+func (w *WrapperSpec) runSingle(ctx *Context, bin string) error {
 	// Resolve binary
-	bin := w.Binary
 	if bin == "" && w.Dynamic {
 		// Dynamic shim requires first positional arg as tool - sanity check
 		if len(ctx.Args()) == 0 {
@@ -500,6 +556,80 @@ func (w *WrapperSpec) run(ctx *Context, _ []string) error {
 	default:
 		return NewError(ErrorTypeInternal, "invalid wrapper mode")
 	}
+}
+
+// runMany executes multiple binaries sequentially or in parallel
+func (w *WrapperSpec) runMany(ctx *Context) error {
+	// Store binaries list in context for Binaries() accessor
+	ctx.binaries = w.Binaries
+
+	if w.Parallel {
+		return w.runManyParallel(ctx)
+	}
+	return w.runManySequential(ctx)
+}
+
+// runManySequential executes binaries one by one
+func (w *WrapperSpec) runManySequential(ctx *Context) error {
+	for _, binary := range w.Binaries {
+		// Set current binary in context for CurrentBinary() accessor
+		ctx.currentBinary = binary
+
+		// Execute this binary
+		err := w.runSingle(ctx, binary)
+
+		// Handle error based on StopOnError setting
+		if err != nil && w.StopOnError {
+			return err
+		}
+		// Continue to next binary even if this one failed
+	}
+	return nil
+}
+
+// runManyParallel executes binaries concurrently
+func (w *WrapperSpec) runManyParallel(ctx *Context) error {
+	type result struct {
+		binary string
+		err    error
+	}
+
+	results := make(chan result, len(w.Binaries))
+
+	// Launch goroutines for each binary
+	for _, binary := range w.Binaries {
+		go func(bin string) {
+			// Create a copy of context for this goroutine
+			goroutineCtx := &Context{
+				App:           ctx.App,
+				Result:        ctx.Result,
+				ctx:           ctx.ctx,
+				parent:        ctx.parent,
+				metadata:      make(map[string]any),
+				currentBinary: bin,
+				binaries:      w.Binaries,
+			}
+
+			err := w.runSingle(goroutineCtx, bin)
+			results <- result{binary: bin, err: err}
+		}(binary)
+	}
+
+	// Collect results
+	var firstErr error
+	for i := 0; i < len(w.Binaries); i++ {
+		res := <-results
+		if res.err != nil && firstErr == nil {
+			firstErr = res.err
+			// If StopOnError is true, we still wait for all to complete
+			// but we'll return the first error
+		}
+	}
+
+	if firstErr != nil && w.StopOnError {
+		return firstErr
+	}
+	return nil
 }
 
 func toExitError(err error) *ExitError {
