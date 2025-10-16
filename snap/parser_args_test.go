@@ -1,6 +1,8 @@
+//nolint:testpackage // Requires access to internal parser functions
 package snap
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
@@ -88,8 +90,8 @@ func TestPositionalArgsMissingRequired(t *testing.T) {
 		t.Fatal("Expected error for missing required argument")
 	}
 
-	parseErr, ok := err.(*ParseError)
-	if !ok {
+	var parseErr *ParseError
+	if !errors.As(err, &parseErr) {
 		t.Fatalf("Expected *ParseError, got %T", err)
 	}
 	if parseErr.Type != ErrorTypeInvalidArgument {
@@ -255,8 +257,8 @@ func TestPositionalArgsInvalidType(t *testing.T) {
 		t.Fatal("Expected error for invalid int value")
 	}
 
-	parseErr, ok := err.(*ParseError)
-	if !ok {
+	var parseErr *ParseError
+	if !errors.As(err, &parseErr) {
 		t.Fatalf("Expected *ParseError, got %T", err)
 	}
 	if parseErr.Type != ErrorTypeInvalidArgument {

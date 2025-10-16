@@ -696,7 +696,7 @@ func (p *Parser) finalize() (*ParseResult, error) {
 // This handles: type conversion, required validation, variadic args, RestArgs, and defaults.
 // Zero-allocation: Uses existing p.argsBuffer and stores directly in typed maps.
 //
-//nolint:gocognit,gocyclo,cyclop // Handles all arg types and validation in one place for performance
+//nolint:gocognit // Handles all arg types and validation in one place for performance
 func (p *Parser) processPositionalArgs(result *ParseResult) error {
 	// Get the argument definitions for the current context
 	var args []*Arg
@@ -773,7 +773,6 @@ func (p *Parser) processPositionalArgs(result *ParseResult) error {
 			}
 
 			// All args consumed
-			argIndex = numProvidedArgs
 			break
 		}
 
@@ -850,6 +849,13 @@ func (p *Parser) storeArgValue(result *ParseResult, argDef *Arg, value string) e
 		}
 		result.ArgFloats[argDef.Name] = floatValue
 
+	case ArgTypeStringSlice, ArgTypeIntSlice:
+		// Slice types should be handled by processVariadicArg, not storeArgValue
+		return &ParseError{
+			Type:    ErrorTypeInvalidArgument,
+			Message: "slice argument types must be variadic: " + argDef.Name,
+		}
+
 	default:
 		return &ParseError{
 			Type:    ErrorTypeInvalidArgument,
@@ -892,6 +898,13 @@ func (p *Parser) processVariadicArg(result *ParseResult, argDef *Arg, values []s
 		result.intSlices = append(result.intSlices, slice)
 		offset := pool.SliceOffset{Start: len(result.intSlices) - 1, End: len(result.intSlices)}
 		result.ArgIntSlices[argDef.Name] = offset
+
+	case ArgTypeString, ArgTypeBool, ArgTypeInt, ArgTypeDuration, ArgTypeFloat:
+		// Non-slice types should not be processed as variadic
+		return &ParseError{
+			Type:    ErrorTypeInvalidArgument,
+			Message: "non-slice argument type cannot be variadic: " + argDef.Name,
+		}
 
 	default:
 		return &ParseError{

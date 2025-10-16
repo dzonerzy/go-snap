@@ -607,7 +607,8 @@ func (a *App) handleParseError(parseErr *ParseError) error {
 			cliErr = cliErr.WithContext("group", parseErr.GroupName)
 		}
 	case ErrorTypeInvalidFlag, ErrorTypeInvalidValue, ErrorTypeMissingValue,
-		ErrorTypeInternal, ErrorTypeMissingRequired, ErrorTypePermission, ErrorTypeValidation:
+		ErrorTypeInternal, ErrorTypeMissingRequired, ErrorTypePermission, ErrorTypeValidation,
+		ErrorTypeInvalidArgument:
 		// No additional context for these types here.
 	}
 
@@ -683,7 +684,7 @@ func (a *App) println(args ...interface{}) {
 }
 
 //
-//nolint:gocognit,funlen // Help rendering involves many small branches; splitting would harm readability.
+//nolint:gocognit,funlen,gocyclo,cyclop // Help rendering involves many small branches; splitting would harm readability.
 func (a *App) showHelp() error {
 	// Application name and description
 	if a.description != "" {
@@ -749,6 +750,7 @@ func (a *App) showHelp() error {
 	a.showOrganizedFlags()
 
 	// Positional arguments
+	//nolint:nestif // Help rendering naturally has nested structures
 	if len(a.args) > 0 {
 		a.println()
 		a.println("Arguments:")
@@ -1061,7 +1063,7 @@ func (a *App) showVersion() error {
 
 // showCommandHelp displays detailed help for a specific command
 //
-//nolint:gocognit // Command help rendering prioritizes clarity over reduced nesting.
+//nolint:gocognit,funlen // Command help rendering prioritizes clarity over reduced nesting.
 func (a *App) showCommandHelp(cmd *Command) error {
 	// Command name and description
 	a.println(cmd.Description())
@@ -1106,6 +1108,7 @@ func (a *App) showCommandHelp(cmd *Command) error {
 	a.showOrganizedCommandFlags(cmd)
 
 	// Positional arguments
+	//nolint:nestif // Help rendering naturally has nested structures
 	if len(cmd.args) > 0 {
 		a.println()
 		a.println("Arguments:")

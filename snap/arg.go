@@ -72,21 +72,21 @@ func (b *ArgBuilder[T, P]) Required() *ArgBuilder[T, P] {
 // Default sets the default value for an optional argument and returns parent for chaining
 func (b *ArgBuilder[T, P]) Default(value T) P {
 	b.arg.Required = false
-	switch any(value).(type) {
+	switch v := any(value).(type) {
 	case string:
-		b.arg.DefaultString = any(value).(string)
+		b.arg.DefaultString = v
 	case int:
-		b.arg.DefaultInt = any(value).(int)
+		b.arg.DefaultInt = v
 	case bool:
-		b.arg.DefaultBool = any(value).(bool)
+		b.arg.DefaultBool = v
 	case time.Duration:
-		b.arg.DefaultDuration = any(value).(time.Duration)
+		b.arg.DefaultDuration = v
 	case float64:
-		b.arg.DefaultFloat = any(value).(float64)
+		b.arg.DefaultFloat = v
 	case []string:
-		b.arg.DefaultStringSlice = any(value).([]string)
+		b.arg.DefaultStringSlice = v
 	case []int:
-		b.arg.DefaultIntSlice = any(value).([]int)
+		b.arg.DefaultIntSlice = v
 	}
 	return b.parent
 }
