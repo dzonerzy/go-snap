@@ -105,6 +105,11 @@ func (b *ArgBuilder[T, P]) Validate(fn func(T) error) *ArgBuilder[T, P] {
 	return b
 }
 
+// Back returns to the parent builder (App or CommandBuilder) to continue chaining
+func (b *ArgBuilder[T, P]) Back() P {
+	return b.parent
+}
+
 // Helper functions for creating argument builders
 
 func newStringArg[P any](name, description string, position int, parent P) *ArgBuilder[string, P] {

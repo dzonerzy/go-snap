@@ -12,30 +12,30 @@ func main() {
 		Version("1.0.0")
 
 	// Example 1: rm-style command - remove multiple files
-	rmCmd := app.Command("rm", "Remove one or more files")
-	rmCmd.StringSliceArg("files", "Files to remove").Required().Variadic()
-	rmCmd.Action(rmAction)
+	app.Command("rm", "Remove one or more files").
+		StringSliceArg("files", "Files to remove").Required().Variadic().
+		Action(rmAction)
 
 	// Example 2: cat-style command - concatenate multiple files
-	catCmd := app.Command("cat", "Concatenate and display file contents")
-	catCmd.StringSliceArg("files", "Files to display").Required().Variadic()
-	catCmd.Action(catAction)
+	app.Command("cat", "Concatenate and display file contents").
+		StringSliceArg("files", "Files to display").Required().Variadic().
+		Action(catAction)
 
 	// Example 3: sum command - sum multiple numbers
-	sumCmd := app.Command("sum", "Calculate sum of numbers")
-	sumCmd.IntSliceArg("numbers", "Numbers to sum").Required().Variadic()
-	sumCmd.Action(sumAction)
+	app.Command("sum", "Calculate sum of numbers").
+		IntSliceArg("numbers", "Numbers to sum").Required().Variadic().
+		Action(sumAction)
 
 	// Example 4: copy-many - copy multiple source files to a destination
-	copyManyCmd := app.Command("copy-many", "Copy multiple files to destination directory")
-	copyManyCmd.StringArg("dest", "Destination directory").Required()
-	copyManyCmd.StringSliceArg("sources", "Source files").Required().Variadic()
-	copyManyCmd.Action(copyManyAction)
+	app.Command("copy-many", "Copy multiple files to destination directory").
+		StringArg("dest", "Destination directory").Required().Back().
+		StringSliceArg("sources", "Source files").Required().Variadic().
+		Action(copyManyAction)
 
 	// Example 5: RestArgs - pass-through style (like docker run)
-	dockerCmd := app.Command("docker-run", "Simulate docker run with pass-through args")
-	dockerCmd.RestArgs()
-	dockerCmd.Action(dockerRunAction)
+	app.Command("docker-run", "Simulate docker run with pass-through args").
+		RestArgs().
+		Action(dockerRunAction)
 
 	if err := app.Run(); err != nil {
 		if err != snap.ErrHelpShown && err != snap.ErrVersionShown {

@@ -14,25 +14,25 @@ func main() {
 		Author("Example Author", "author@example.com")
 
 	// Example 1: Copy command with required source and optional destination
-	copyCmd := app.Command("copy", "Copy a file from source to destination")
-	copyCmd.StringArg("source", "Source file path").Required()
-	copyCmd.StringArg("dest", "Destination file path").Default("output.txt")
-	copyCmd.Action(copyAction)
+	app.Command("copy", "Copy a file from source to destination").
+		StringArg("source", "Source file path").Required().Back().
+		StringArg("dest", "Destination file path").Default("output.txt").
+		Action(copyAction)
 
 	// Example 2: Convert command with type-safe arguments
-	convertCmd := app.Command("convert", "Convert file with various options")
-	convertCmd.StringArg("input", "Input file").Required()
-	convertCmd.StringArg("output", "Output file").Required()
-	convertCmd.IntArg("quality", "Quality level (1-100)").Default(80)
-	convertCmd.BoolArg("verbose", "Verbose output").Default(false)
-	convertCmd.Action(convertAction)
+	app.Command("convert", "Convert file with various options").
+		StringArg("input", "Input file").Required().Back().
+		StringArg("output", "Output file").Required().Back().
+		IntArg("quality", "Quality level (1-100)").Default(80).
+		BoolArg("verbose", "Verbose output").Default(false).
+		Action(convertAction)
 
 	// Example 3: Process command with different types
-	processCmd := app.Command("process", "Process file with timeout and threshold")
-	processCmd.StringArg("file", "File to process").Required()
-	processCmd.DurationArg("timeout", "Processing timeout").Default(30 * time.Second)
-	processCmd.FloatArg("threshold", "Threshold value").Default(0.5)
-	processCmd.Action(processAction)
+	app.Command("process", "Process file with timeout and threshold").
+		StringArg("file", "File to process").Required().Back().
+		DurationArg("timeout", "Processing timeout").Default(30*time.Second).
+		FloatArg("threshold", "Threshold value").Default(0.5).
+		Action(processAction)
 
 	if err := app.Run(); err != nil {
 		if err != snap.ErrHelpShown && err != snap.ErrVersionShown {
