@@ -37,16 +37,19 @@ type App struct {
 	authors     []Author
 
 	// Internal storage
-	flags      map[string]*Flag
-	shortFlags map[rune]*Flag // O(1) lookup for short flags
-	commands   map[string]*Command
-	flagGroups []*FlagGroup // Flag groups for validation
+	flags       map[string]*Flag
+	shortFlags  map[rune]*Flag // O(1) lookup for short flags
+	commands    map[string]*Command
+	flagGroups  []*FlagGroup // Flag groups for validation
+	args        []*Arg       // Positional arguments (ordered by position)
+	hasRestArgs bool         // If true, collect all remaining args after declared args
 
 	// Global configuration
 	helpFlag    bool
 	versionFlag bool
 
 	// Execution context
+	action       ActionFunc // Default action when no command is matched
 	beforeAction ActionFunc
 	afterAction  ActionFunc
 
@@ -141,6 +144,12 @@ func (a *App) Before(fn ActionFunc) *App {
 // After sets a function to run after any command action
 func (a *App) After(fn ActionFunc) *App {
 	a.afterAction = fn
+	return a
+}
+
+// Action sets the default action for the app (when no command is matched)
+func (a *App) Action(fn ActionFunc) *App {
+	a.action = fn
 	return a
 }
 
@@ -241,6 +250,73 @@ func (a *App) IntSliceFlag(name, description string) *FlagBuilder[[]int, *App] {
 	}
 	a.flags[name] = flag
 	return &FlagBuilder[[]int, *App]{flag: flag, parent: a}
+}
+
+// Positional argument methods
+
+// StringArg adds a string positional argument to the application
+func (a *App) StringArg(name, description string) *ArgBuilder[string, *App] {
+	position := len(a.args)
+	builder := newStringArg(name, description, position, a)
+	a.args = append(a.args, builder.arg)
+	return builder
+}
+
+// IntArg adds an integer positional argument to the application
+func (a *App) IntArg(name, description string) *ArgBuilder[int, *App] {
+	position := len(a.args)
+	builder := newIntArg(name, description, position, a)
+	a.args = append(a.args, builder.arg)
+	return builder
+}
+
+// BoolArg adds a boolean positional argument to the application
+func (a *App) BoolArg(name, description string) *ArgBuilder[bool, *App] {
+	position := len(a.args)
+	builder := newBoolArg(name, description, position, a)
+	a.args = append(a.args, builder.arg)
+	return builder
+}
+
+// FloatArg adds a float64 positional argument to the application
+func (a *App) FloatArg(name, description string) *ArgBuilder[float64, *App] {
+	position := len(a.args)
+	builder := newFloatArg(name, description, position, a)
+	a.args = append(a.args, builder.arg)
+	return builder
+}
+
+// DurationArg adds a duration positional argument to the application
+func (a *App) DurationArg(name, description string) *ArgBuilder[time.Duration, *App] {
+	position := len(a.args)
+	builder := newDurationArg(name, description, position, a)
+	a.args = append(a.args, builder.arg)
+	return builder
+}
+
+// StringSliceArg adds a string slice positional argument to the application
+// Call .Variadic() on the builder to make it accept multiple values
+func (a *App) StringSliceArg(name, description string) *ArgBuilder[[]string, *App] {
+	position := len(a.args)
+	builder := newStringSliceArg(name, description, position, a)
+	a.args = append(a.args, builder.arg)
+	return builder
+}
+
+// IntSliceArg adds an int slice positional argument to the application
+// Call .Variadic() on the builder to make it accept multiple values
+func (a *App) IntSliceArg(name, description string) *ArgBuilder[[]int, *App] {
+	position := len(a.args)
+	builder := newIntSliceArg(name, description, position, a)
+	a.args = append(a.args, builder.arg)
+	return builder
+}
+
+// RestArgs configures the app to capture all remaining positional arguments
+// after declared args. Cannot be used with .Variadic() on the last arg.
+func (a *App) RestArgs() *App {
+	a.hasRestArgs = true
+	return a
 }
 
 // Command builder
@@ -378,10 +454,16 @@ func (a *App) RunWithArgs(ctx context.Context, args []string) error {
 			}
 		}
 	} else {
-		// No command specified, check if app has a default wrapper
-		if a.defaultWrapper != nil {
+		// No command specified
+		switch {
+		case a.action != nil:
+			// Execute app-level action (if defined)
+			wrappedAction := a.wrapActionWithMiddleware(a.action, nil)
+			actionErr = wrappedAction(execCtx)
+		case a.defaultWrapper != nil:
+			// Check if app has a default wrapper
 			actionErr = a.defaultWrapper.run(execCtx, args)
-		} else {
+		default:
 			// Default to help
 			actionErr = a.showHelp()
 		}
@@ -525,7 +607,8 @@ func (a *App) handleParseError(parseErr *ParseError) error {
 			cliErr = cliErr.WithContext("group", parseErr.GroupName)
 		}
 	case ErrorTypeInvalidFlag, ErrorTypeInvalidValue, ErrorTypeMissingValue,
-		ErrorTypeInternal, ErrorTypeMissingRequired, ErrorTypePermission, ErrorTypeValidation:
+		ErrorTypeInternal, ErrorTypeMissingRequired, ErrorTypePermission, ErrorTypeValidation,
+		ErrorTypeInvalidArgument:
 		// No additional context for these types here.
 	}
 
@@ -590,48 +673,75 @@ func (a *App) addCommandHelpFlag(cmd *Command) {
 }
 
 // showHelp displays comprehensive application help
+// print writes formatted output to the app's IO manager output stream
+func (a *App) print(args ...interface{}) {
+	fmt.Fprint(a.IO().Out(), args...)
+}
+
+// println writes formatted output with a newline to the app's IO manager output stream
+func (a *App) println(args ...interface{}) {
+	fmt.Fprintln(a.IO().Out(), args...)
+}
+
 //
-//nolint:gocognit,funlen // Help rendering involves many small branches; splitting would harm readability.
+//nolint:gocognit,funlen,gocyclo,cyclop // Help rendering involves many small branches; splitting would harm readability.
 func (a *App) showHelp() error {
 	// Application name and description
 	if a.description != "" {
-		println(a.description)
-		println()
+		a.println(a.description)
+		a.println()
 	}
 
 	// Detailed help text if available
 	if a.helpText != "" {
-		println(a.helpText)
-		println()
+		a.println(a.helpText)
+		a.println()
 	}
 
 	// Usage line
-	println("Usage:")
-	print("  ", a.name)
+	a.println("Usage:")
+	a.print("  ", a.name)
 	if len(a.flags) > 0 {
-		print(" [GLOBAL FLAGS]")
+		a.print(" [GLOBAL FLAGS]")
+	}
+
+	// Show positional arguments in usage line
+	if len(a.args) > 0 {
+		for _, arg := range a.args {
+			a.print(" ")
+			if arg.Required {
+				a.print("<", arg.Name, ">")
+			} else {
+				a.print("[", arg.Name, "]")
+			}
+			if arg.Variadic {
+				a.print("...")
+			}
+		}
+	} else if a.hasRestArgs {
+		a.print(" [args...]")
 	}
 
 	if len(a.commands) > 0 {
-		print(" COMMAND [COMMAND FLAGS]")
+		a.print(" COMMAND [COMMAND FLAGS]")
 	}
-	println()
+	a.println()
 
 	// Version information
 	if a.version != "" {
-		println()
-		println("Version:", a.version)
+		a.println()
+		a.println("Version:", a.version)
 	}
 
 	// Authors information
 	if len(a.authors) > 0 {
-		println()
+		a.println()
 		if len(a.authors) == 1 {
-			println("Author:", a.authors[0].Name, "<"+a.authors[0].Email+">")
+			a.println("Author:", a.authors[0].Name, "<"+a.authors[0].Email+">")
 		} else {
-			println("Authors:")
+			a.println("Authors:")
 			for _, author := range a.authors {
-				println("  ", author.Name, "<"+author.Email+">")
+				a.println("  ", author.Name, "<"+author.Email+">")
 			}
 		}
 	}
@@ -639,10 +749,36 @@ func (a *App) showHelp() error {
 	// Show flags organized by groups
 	a.showOrganizedFlags()
 
+	// Positional arguments
+	//nolint:nestif // Help rendering naturally has nested structures
+	if len(a.args) > 0 {
+		a.println()
+		a.println("Arguments:")
+		for _, arg := range a.args {
+			a.print("  ")
+			if arg.Required {
+				a.print("<", arg.Name, ">")
+			} else {
+				a.print("[", arg.Name, "]")
+			}
+			if arg.Variadic {
+				a.print("...")
+			}
+			if arg.Description != "" {
+				a.print("\t", arg.Description)
+			}
+			a.println()
+		}
+	} else if a.hasRestArgs {
+		a.println()
+		a.println("Arguments:")
+		a.println("  [args...]\tAll remaining arguments are passed through")
+	}
+
 	// Commands (deterministic order)
 	if len(a.commands) > 0 { //nolint:nestif // help rendering uses explicit nested branches for clarity
-		println()
-		println("Commands:")
+		a.println()
+		a.println("Commands:")
 		names := make([]string, 0, len(a.commands))
 		for name := range a.commands {
 			if !a.commands[name].Hidden {
@@ -667,32 +803,32 @@ func (a *App) showHelp() error {
 
 		for _, name := range names {
 			cmd := a.commands[name]
-			print("  ", name)
+			a.print("  ", name)
 			if cmd.Description() != "" {
 				// Add padding to align descriptions
 				padding := maxNameLen - len(name)
 				for range padding {
-					print(" ")
+					a.print(" ")
 				}
-				print("\t", cmd.Description())
+				a.print("\t", cmd.Description())
 			}
 			if len(cmd.Aliases) > 0 {
-				print(" (aliases: ")
+				a.print(" (aliases: ")
 				for i, alias := range cmd.Aliases {
 					if i > 0 {
-						print(", ")
+						a.print(", ")
 					}
-					print(alias)
+					a.print(alias)
 				}
-				print(")")
+				a.print(")")
 			}
-			println()
+			a.println()
 		}
 	}
 
 	// Footer
-	println()
-	println("Use \"" + a.name + " COMMAND --help\" for more information about a command.")
+	a.println()
+	a.println("Use \"" + a.name + " COMMAND --help\" for more information about a command.")
 
 	return nil
 }
@@ -755,11 +891,11 @@ func (a *App) showOrganizedFlags() {
 	// Show flag groups first (sorted)
 	//nolint:dupl // Similar to command flag rendering but operates on app-level flags
 	for _, group := range groups {
-		println()
+		a.println()
 		if group.Description != "" {
-			println(group.Name + " - " + group.Description + ":")
+			a.println(group.Name + " - " + group.Description + ":")
 		} else {
-			println(group.Name + ":")
+			a.println(group.Name + ":")
 		}
 
 		// sort flags by name
@@ -783,17 +919,17 @@ func (a *App) showOrganizedFlags() {
 		// Show constraint info
 		constraintDesc := a.formatGroupConstraint(group.Constraint)
 		if constraintDesc != "" {
-			println("  Note:", constraintDesc)
+			a.println("  Note:", constraintDesc)
 		}
 	}
 
 	// Show ungrouped flags
 	if len(ungroupedFlags) > 0 {
-		println()
+		a.println()
 		if len(a.flagGroups) > 0 {
-			println("Global Flags:")
+			a.println("Global Flags:")
 		} else {
-			println("Flags:")
+			a.println("Flags:")
 		}
 
 		// sort names
@@ -816,37 +952,37 @@ func (a *App) showOrganizedFlags() {
 
 // showFlag displays a single flag with both long and short forms
 func (a *App) showFlag(flag *Flag, maxWidth int) {
-	print("  --", flag.Name)
+	a.print("  --", flag.Name)
 
 	// Show short form if available
 	if flag.Short != 0 {
-		print(", -", string(flag.Short))
+		a.print(", -", string(flag.Short))
 	}
 
 	// Show value type for non-boolean flags
 	if flag.Type != FlagTypeBool {
-		print(" value")
+		a.print(" value")
 	}
 
 	// Add padding to align descriptions
 	currentWidth := flagDisplayWidth(flag)
 	padding := maxWidth - currentWidth
 	for range padding {
-		print(" ")
+		a.print(" ")
 	}
 
 	// Show description
 	if flag.Description != "" {
-		print("\t", flag.Description)
+		a.print("\t", flag.Description)
 	}
 
 	// Show default value if present
 	defaultValue := a.getDefaultValue(flag)
 	if defaultValue != "" {
-		print(" (default: ", defaultValue, ")")
+		a.print(" (default: ", defaultValue, ")")
 	}
 
-	println()
+	a.println()
 }
 
 // formatGroupConstraint returns a human-readable constraint description
@@ -921,43 +1057,86 @@ func (a *App) getDefaultValue(flag *Flag) string {
 
 // showVersion displays application version
 func (a *App) showVersion() error {
-	println(a.name, a.version)
+	a.println(a.name, a.version)
 	return nil
 }
 
 // showCommandHelp displays detailed help for a specific command
 //
-//nolint:gocognit // Command help rendering prioritizes clarity over reduced nesting.
+//nolint:gocognit,funlen // Command help rendering prioritizes clarity over reduced nesting.
 func (a *App) showCommandHelp(cmd *Command) error {
 	// Command name and description
-	println(cmd.Description())
-	println()
+	a.println(cmd.Description())
+	a.println()
 
 	// Usage line
-	println("Usage:")
-	print("  ", a.name, " ", cmd.Name())
+	a.println("Usage:")
+	a.print("  ", a.name, " ", cmd.Name())
 	if len(cmd.flags) > 0 {
-		print(" [FLAGS]")
+		a.print(" [FLAGS]")
+	}
+
+	// Show positional arguments in usage line
+	if len(cmd.args) > 0 {
+		for _, arg := range cmd.args {
+			a.print(" ")
+			if arg.Required {
+				a.print("<", arg.Name, ">")
+			} else {
+				a.print("[", arg.Name, "]")
+			}
+			if arg.Variadic {
+				a.print("...")
+			}
+		}
+	} else if cmd.hasRestArgs {
+		a.print(" [args...]")
 	}
 
 	if len(cmd.subcommands) > 0 {
-		print(" SUBCOMMAND")
+		a.print(" SUBCOMMAND")
 	}
-	println()
+	a.println()
 
 	// Long help text if available
 	if cmd.HelpText != "" {
-		println()
-		println(cmd.HelpText)
+		a.println()
+		a.println(cmd.HelpText)
 	}
 
 	// Command-specific flags (organized by groups, deterministic order)
 	a.showOrganizedCommandFlags(cmd)
 
+	// Positional arguments
+	//nolint:nestif // Help rendering naturally has nested structures
+	if len(cmd.args) > 0 {
+		a.println()
+		a.println("Arguments:")
+		for _, arg := range cmd.args {
+			a.print("  ")
+			if arg.Required {
+				a.print("<", arg.Name, ">")
+			} else {
+				a.print("[", arg.Name, "]")
+			}
+			if arg.Variadic {
+				a.print("...")
+			}
+			if arg.Description != "" {
+				a.print("\t", arg.Description)
+			}
+			a.println()
+		}
+	} else if cmd.hasRestArgs {
+		a.println()
+		a.println("Arguments:")
+		a.println("  [args...]\tAll remaining arguments are passed through")
+	}
+
 	// Subcommands (sorted)
 	if len(cmd.subcommands) > 0 { //nolint:nestif // help rendering uses explicit nested branches for clarity
-		println()
-		println("Subcommands:")
+		a.println()
+		a.println("Subcommands:")
 		names := make([]string, 0, len(cmd.subcommands))
 		for name, sc := range cmd.subcommands {
 			if !sc.Hidden {
@@ -973,27 +1152,27 @@ func (a *App) showCommandHelp(cmd *Command) error {
 		}
 		for _, name := range names {
 			subcmd := cmd.subcommands[name]
-			print("  ", name)
+			a.print("  ", name)
 			if subcmd.Description() != "" {
-				print("\t", subcmd.Description())
+				a.print("\t", subcmd.Description())
 			}
 			if len(subcmd.Aliases) > 0 {
-				print(" (aliases: ")
+				a.print(" (aliases: ")
 				for i, alias := range subcmd.Aliases {
 					if i > 0 {
-						print(", ")
+						a.print(", ")
 					}
-					print(alias)
+					a.print(alias)
 				}
-				print(")")
+				a.print(")")
 			}
-			println()
+			a.println()
 		}
 	}
 
 	// Footer
-	println()
-	println("Use \"" + a.name + " " + cmd.Name() + " SUBCOMMAND --help\" for more information about a subcommand.")
+	a.println()
+	a.println("Use \"" + a.name + " " + cmd.Name() + " SUBCOMMAND --help\" for more information about a subcommand.")
 
 	return nil
 }
@@ -1028,11 +1207,11 @@ func (a *App) showOrganizedCommandFlags(cmd *Command) {
 	// Print groups
 	//nolint:dupl // Similar to app flag rendering but operates on command-level flags
 	for _, g := range cmd.flagGroups {
-		println()
+		a.println()
 		if g.Description != "" {
-			println(g.Name + " - " + g.Description + ":")
+			a.println(g.Name + " - " + g.Description + ":")
 		} else {
-			println(g.Name + ":")
+			a.println(g.Name + ":")
 		}
 		// deterministic order
 		names := make([]string, 0, len(g.Flags))
@@ -1054,7 +1233,7 @@ func (a *App) showOrganizedCommandFlags(cmd *Command) {
 		}
 		constraintDesc := a.formatGroupConstraint(g.Constraint)
 		if constraintDesc != "" {
-			println("  Note:", constraintDesc)
+			a.println("  Note:", constraintDesc)
 		}
 	}
 
@@ -1074,8 +1253,8 @@ func (a *App) showOrganizedCommandFlags(cmd *Command) {
 				}
 			}
 		}
-		println()
-		println("Flags:")
+		a.println()
+		a.println("Flags:")
 		for _, name := range ungrouped {
 			a.showFlag(cmd.flags[name], maxWidth)
 		}

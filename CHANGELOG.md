@@ -1,5 +1,77 @@
 # Changelog
 
+## [0.2.0] - 2025-10-16
+
+### Added
+- **Type-safe positional arguments** with `StringArg()`, `IntArg()`, `BoolArg()`, `FloatArg()`, `DurationArg()`, `StringSliceArg()`, `IntSliceArg()`
+  * Incremental declaration: first arg is position 0, second is position 1, etc.
+  * Support at both app-level and command-level
+  * Required vs optional arguments with `.Required()` and `.Default(value)`
+  * Access via `ctx.String("argname")`, `ctx.MustString("argname", default)` (same pattern as flags)
+  * Automatic type conversion and validation
+  * Help text integration: displays `<required>` and `[optional]` args in usage
+  * Validation: enforces required arg count before action execution
+  * Example: `app.StringArg("filename", "Input file").Required().IntArg("count", "Number of items").Default(10)`
+
+- **Variadic positional arguments** with `StringSliceArg().Variadic()` and `IntSliceArg().Variadic()`
+  * Collect multiple values for the last positional argument
+  * Type-safe: `ctx.StringSlice("files")` returns `[]string`, `ctx.IntSlice("ports")` returns `[]int`
+  * Can be required (1+ items) or optional with default (0+ items)
+  * Help shows as `<files>...` for required or `[files]...` for optional
+  * Only last argument can be variadic
+  * Example: `app.Command("rm").StringSliceArg("files", "Files to remove").Required().Variadic()`
+  * Use cases: `rm file1 file2 file3`, `tar -czf out.tar file1 file2 file3`, `listen 8080 8081 8082`
+
+- **Rest arguments** with `RestArgs()` for pass-through scenarios
+  * Captures all remaining arguments after declared positional args as raw strings
+  * Access via `ctx.RestArgs()` or `ctx.Args()` (returns `[]string`)
+  * No validation or type conversion - raw pass-through
+  * Ideal for docker-style commands or forwarding to wrapped binaries
+  * Cannot combine with `.Variadic()` - choose one approach
+  * Example: `app.Command("run").StringArg("script", "Script").Required().RestArgs()`
+  * Use cases: `docker run image cmd args...`, `go run main.go args...`
+
+- Context methods for positional arguments:
+  * `ctx.Arg(index)` - Get raw positional arg by index
+  * `ctx.RestArgs()` - Get all remaining args when using `RestArgs()`
+  * `ctx.StringArg()`, `ctx.IntArg()`, `ctx.BoolArg()`, `ctx.FloatArg()`, `ctx.DurationArg()` - Type-safe accessors
+  * `ctx.StringSliceArg()`, `ctx.IntSliceArg()` - Slice accessors for variadic arguments
+  * Existing `ctx.Args()` now returns only unparsed positional args (after named args consumed)
+
+- **Fluent API chaining** with `.Back()` method for ArgBuilder
+  * Consistent with FlagBuilder pattern
+  * Example: `app.StringArg("source", "Source file").Required().Back().StringArg("dest", "Destination").Default("out.txt")`
+
+- **App-level action** with `app.Action(fn)` method
+  * Execute action when no command is matched
+  * Falls back to help if no action defined
+  * Enables standalone app behavior without requiring commands
+
+- **Zero-allocation parsing** for positional arguments
+  * Uses typed maps (ArgStrings, ArgInts, etc.) to avoid interface{} boxing
+  * Pooled slices for variadic arguments
+  * Slice offset pattern for zero-alloc slice access
+  * Benchmarks: 0 B/op, 0 allocs/op maintained
+
+- New examples demonstrating positional arguments:
+  * `examples/positional-args` - Basic positional argument usage with all types
+  * `examples/variadic-args` - Variadic arguments and RestArgs pass-through
+
+### Changed
+- Help output now displays positional arguments in usage line:
+  * Named args: `myapp <filename> [count]`
+  * Variadic args: `myapp rm <files>...`
+  * Rest args: `myapp run <script> [args...]`
+- Help output includes "Arguments:" section with descriptions
+- Help flag (`--help`) now has priority over required argument validation
+  * `--help` works even when required args are missing
+  * Allows users to see help before providing all required arguments
+- Parser validates positional argument count against declared requirements
+- `ctx.Args()` behavior: returns remaining positional args after named args are consumed
+- ArgBuilder now uses two type parameters `ArgBuilder[T, P]` matching FlagBuilder pattern
+- `.Required()` and `.Validate()` return `*ArgBuilder[T, P]` for chaining
+- `.Default()` and `.Variadic()` return parent type `P` to complete chain
+
 ## [0.1.3] - 2025-10-16
 
 ### Added
@@ -53,4 +125,3 @@
 
 ### Fixed
 - Unknown subcommand surfaced and suggestions improved (prefers child suggestions).
-

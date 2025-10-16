@@ -149,6 +149,17 @@ func (p *Parser) parseArgument(arg string, allArgs []string) error {
 		return p.parsePositionalArg(argBytes)
 	}
 
+	// Check if RestArgs is enabled - if so, treat everything as positional
+	hasRestArgs := false
+	if p.currentCmd != nil {
+		hasRestArgs = p.currentCmd.hasRestArgs
+	} else if p.app != nil {
+		hasRestArgs = p.app.hasRestArgs
+	}
+	if hasRestArgs {
+		return p.parsePositionalArg(argBytes)
+	}
+
 	// "--" terminates flag parsing; subsequent tokens are positional args
 	if len(argBytes) == 2 && argBytes[0] == '-' && argBytes[1] == '-' {
 		p.state = StatePositionalArgs
@@ -166,15 +177,20 @@ func (p *Parser) parseArgument(arg string, allArgs []string) error {
 
 	case p.state == StateInit || p.state == StateGlobalFlags:
 		// Top-level token: treat as a command only if it exists; otherwise,
-		// when an app-level wrapper is configured, treat it as a positional arg
-		// to be forwarded to the wrapper.
+		// treat as positional arg if positional args are defined, or if wrapper is configured.
 		name := intern.InternBytes(argBytes)
 		if cmd := p.findCommand(name); cmd != nil {
 			return p.parseCommand(argBytes)
 		}
+		// If app has positional args defined or RestArgs, treat as positional
+		if p.app != nil && (len(p.app.args) > 0 || p.app.hasRestArgs) {
+			return p.parsePositionalArg(argBytes)
+		}
+		// If app has a wrapper, treat as positional
 		if p.app != nil && p.app.defaultWrapper != nil {
 			return p.parsePositionalArg(argBytes)
 		}
+		// Otherwise, it's an unknown command
 		return p.createUnknownCommandError(name)
 	case p.state == StateCommandFlags:
 		// In a command context: if the current command defines subcommands,
@@ -657,10 +673,13 @@ func (p *Parser) finalize() (*ParseResult, error) {
 		p.currentResult = p.getResult()
 	}
 
-	// Copy args from buffer without allocation
 	result := p.currentResult
-	result.Args = append(result.Args[:0], p.argsBuffer...)
 	result.Command = p.currentCmd
+
+	// Process positional arguments
+	if err := p.processPositionalArgs(result); err != nil {
+		return nil, err
+	}
 
 	// Apply default values for flags that weren't provided
 	p.applyDefaults(result)
@@ -671,6 +690,279 @@ func (p *Parser) finalize() (*ParseResult, error) {
 	}
 
 	return result, nil
+}
+
+// processPositionalArgs processes positional arguments after flag parsing is complete.
+// This handles: type conversion, required validation, variadic args, RestArgs, and defaults.
+// Zero-allocation: Uses existing p.argsBuffer and stores directly in typed maps.
+//
+//nolint:gocognit // Handles all arg types and validation in one place for performance
+func (p *Parser) processPositionalArgs(result *ParseResult) error {
+	// Get the argument definitions for the current context
+	var args []*Arg
+	var hasRestArgs bool
+
+	if result.Command != nil {
+		args = result.Command.args
+		hasRestArgs = result.Command.hasRestArgs
+	} else if p.app != nil {
+		args = p.app.args
+		hasRestArgs = p.app.hasRestArgs
+	}
+
+	// Fast path: no args defined and no RestArgs
+	if len(args) == 0 && !hasRestArgs {
+		// Store raw args for ctx.Arg(index) access
+		result.Args = append(result.Args[:0], p.argsBuffer...)
+		return nil
+	}
+
+	// Check if help flag is set - skip required validation if help is requested
+	helpRequested := result.MustGetBool("help", false)
+	if !helpRequested {
+		// Also check global help flag
+		helpRequested = result.MustGetGlobalBool("help", false)
+	}
+
+	// Check for RestArgs mode: collect all remaining args
+	if hasRestArgs {
+		result.RestArgs = append(result.RestArgs[:0], p.argsBuffer...)
+		result.Args = append(result.Args[:0], p.argsBuffer...)
+		return nil
+	}
+
+	// Find if we have a variadic arg (must be last)
+	var variadicArg *Arg
+	var variadicPosition int
+	for i, arg := range args {
+		if arg.Variadic {
+			variadicArg = arg
+			variadicPosition = i
+			break
+		}
+	}
+
+	// Validate: variadic must be last if present
+	if variadicArg != nil && variadicPosition != len(args)-1 {
+		return &ParseError{
+			Type:    ErrorTypeInvalidArgument,
+			Message: "variadic argument must be the last positional argument",
+		}
+	}
+
+	// Process each declared positional argument
+	numProvidedArgs := len(p.argsBuffer)
+	argIndex := 0 // Index into p.argsBuffer
+
+	for _, argDef := range args {
+		// Check if we're at the variadic arg
+		if argDef.Variadic {
+			// Collect all remaining args into variadic slice
+			remaining := p.argsBuffer[argIndex:]
+
+			if len(remaining) == 0 && argDef.Required && !helpRequested {
+				return &ParseError{
+					Type:    ErrorTypeInvalidArgument,
+					Message: "missing required variadic argument: " + argDef.Name,
+				}
+			}
+
+			// Process variadic based on type
+			if err := p.processVariadicArg(result, argDef, remaining); err != nil {
+				return err
+			}
+
+			// All args consumed
+			break
+		}
+
+		// Regular (non-variadic) arg
+		if argIndex >= numProvidedArgs {
+			// No more args provided
+			if argDef.Required && !helpRequested {
+				return &ParseError{
+					Type:    ErrorTypeInvalidArgument,
+					Message: "missing required argument: " + argDef.Name,
+				}
+			}
+			// Apply default for optional arg
+			if err := p.applyArgDefault(result, argDef); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// Get the arg value from buffer
+		argValue := p.argsBuffer[argIndex]
+		argIndex++
+
+		// Parse and store based on type
+		if err := p.storeArgValue(result, argDef, argValue); err != nil {
+			return err
+		}
+	}
+
+	// Store raw args for ctx.Arg(index) access (zero-alloc copy)
+	result.Args = append(result.Args[:0], p.argsBuffer...)
+
+	return nil
+}
+
+// storeArgValue parses and stores a single positional argument value
+// Zero-allocation: Stores directly in typed maps without interface{} boxing
+func (p *Parser) storeArgValue(result *ParseResult, argDef *Arg, value string) error {
+	switch argDef.Type {
+	case ArgTypeString:
+		result.ArgStrings[argDef.Name] = value
+
+	case ArgTypeInt:
+		intValue, err := p.parseIntBytes(stringToBytes(value))
+		if err != nil {
+			return &ParseError{
+				Type:    ErrorTypeInvalidArgument,
+				Message: "invalid integer value for argument '" + argDef.Name + "': " + value,
+			}
+		}
+		result.ArgInts[argDef.Name] = intValue
+
+	case ArgTypeBool:
+		boolValue := p.parseBoolBytes(stringToBytes(value))
+		result.ArgBools[argDef.Name] = boolValue
+
+	case ArgTypeDuration:
+		durationValue, err := p.parseDurationBytes(stringToBytes(value))
+		if err != nil {
+			return &ParseError{
+				Type:    ErrorTypeInvalidArgument,
+				Message: "invalid duration value for argument '" + argDef.Name + "': " + value,
+			}
+		}
+		result.ArgDurations[argDef.Name] = durationValue
+
+	case ArgTypeFloat:
+		floatValue, err := p.parseFloatBytes(stringToBytes(value))
+		if err != nil {
+			return &ParseError{
+				Type:    ErrorTypeInvalidArgument,
+				Message: "invalid float value for argument '" + argDef.Name + "': " + value,
+			}
+		}
+		result.ArgFloats[argDef.Name] = floatValue
+
+	case ArgTypeStringSlice, ArgTypeIntSlice:
+		// Slice types should be handled by processVariadicArg, not storeArgValue
+		return &ParseError{
+			Type:    ErrorTypeInvalidArgument,
+			Message: "slice argument types must be variadic: " + argDef.Name,
+		}
+
+	default:
+		return &ParseError{
+			Type:    ErrorTypeInvalidArgument,
+			Message: "unsupported argument type: " + string(argDef.Type),
+		}
+	}
+
+	return nil
+}
+
+// processVariadicArg processes a variadic argument (StringSlice or IntSlice)
+// Zero-allocation: Uses pooled slices
+func (p *Parser) processVariadicArg(result *ParseResult, argDef *Arg, values []string) error {
+	switch argDef.Type {
+	case ArgTypeStringSlice:
+		// Use pooled slice
+		slice := pool.GetStringSlice()
+		*slice = append(*slice, values...)
+
+		// Store slice and create offset
+		result.stringSlices = append(result.stringSlices, slice)
+		offset := pool.SliceOffset{Start: len(result.stringSlices) - 1, End: len(result.stringSlices)}
+		result.ArgStringSlices[argDef.Name] = offset
+
+	case ArgTypeIntSlice:
+		// Parse each value as int
+		slice := pool.GetIntSlice()
+		for _, valueStr := range values {
+			intValue, err := p.parseIntBytes(stringToBytes(valueStr))
+			if err != nil {
+				return &ParseError{
+					Type:    ErrorTypeInvalidArgument,
+					Message: "invalid integer value in variadic argument '" + argDef.Name + "': " + valueStr,
+				}
+			}
+			*slice = append(*slice, intValue)
+		}
+
+		// Store slice and create offset
+		result.intSlices = append(result.intSlices, slice)
+		offset := pool.SliceOffset{Start: len(result.intSlices) - 1, End: len(result.intSlices)}
+		result.ArgIntSlices[argDef.Name] = offset
+
+	case ArgTypeString, ArgTypeBool, ArgTypeInt, ArgTypeDuration, ArgTypeFloat:
+		// Non-slice types should not be processed as variadic
+		return &ParseError{
+			Type:    ErrorTypeInvalidArgument,
+			Message: "non-slice argument type cannot be variadic: " + argDef.Name,
+		}
+
+	default:
+		return &ParseError{
+			Type:    ErrorTypeInvalidArgument,
+			Message: "variadic arguments only support StringSlice and IntSlice types",
+		}
+	}
+
+	return nil
+}
+
+// applyArgDefault applies the default value for an optional positional argument
+// Zero-allocation: Stores directly in typed maps
+func (p *Parser) applyArgDefault(result *ParseResult, argDef *Arg) error {
+	switch argDef.Type {
+	case ArgTypeString:
+		if argDef.DefaultString != "" {
+			result.ArgStrings[argDef.Name] = argDef.DefaultString
+		}
+
+	case ArgTypeInt:
+		if argDef.DefaultInt != 0 {
+			result.ArgInts[argDef.Name] = argDef.DefaultInt
+		}
+
+	case ArgTypeBool:
+		result.ArgBools[argDef.Name] = argDef.DefaultBool
+
+	case ArgTypeDuration:
+		if argDef.DefaultDuration != 0 {
+			result.ArgDurations[argDef.Name] = argDef.DefaultDuration
+		}
+
+	case ArgTypeFloat:
+		if argDef.DefaultFloat != 0.0 {
+			result.ArgFloats[argDef.Name] = argDef.DefaultFloat
+		}
+
+	case ArgTypeStringSlice:
+		if len(argDef.DefaultStringSlice) > 0 {
+			slice := pool.GetStringSlice()
+			*slice = append(*slice, argDef.DefaultStringSlice...)
+			result.stringSlices = append(result.stringSlices, slice)
+			offset := pool.SliceOffset{Start: len(result.stringSlices) - 1, End: len(result.stringSlices)}
+			result.ArgStringSlices[argDef.Name] = offset
+		}
+
+	case ArgTypeIntSlice:
+		if len(argDef.DefaultIntSlice) > 0 {
+			slice := pool.GetIntSlice()
+			*slice = append(*slice, argDef.DefaultIntSlice...)
+			result.intSlices = append(result.intSlices, slice)
+			offset := pool.SliceOffset{Start: len(result.intSlices) - 1, End: len(result.intSlices)}
+			result.ArgIntSlices[argDef.Name] = offset
+		}
+	}
+
+	return nil
 }
 
 // applyDefaults applies default values for flags that weren't explicitly provided
@@ -1893,6 +2185,132 @@ func (r *ParseResult) MustGetGlobalStringSlice(name string, defaultValue []strin
 // MustGetGlobalIntSlice retrieves a global int slice flag value or returns the default
 func (r *ParseResult) MustGetGlobalIntSlice(name string, defaultValue []int) []int {
 	if value, exists := r.GetGlobalIntSlice(name); exists {
+		return value
+	}
+	return defaultValue
+}
+
+// Positional argument access methods (zero-allocation)
+
+// GetArgString retrieves a string positional argument value
+func (r *ParseResult) GetArgString(name string) (string, bool) {
+	if value, exists := r.ArgStrings[name]; exists {
+		return value, true
+	}
+	return "", false
+}
+
+// MustGetArgString retrieves a string positional argument value or returns the default
+func (r *ParseResult) MustGetArgString(name, defaultValue string) string {
+	if value, exists := r.GetArgString(name); exists {
+		return value
+	}
+	return defaultValue
+}
+
+// GetArgInt retrieves an integer positional argument value
+func (r *ParseResult) GetArgInt(name string) (int, bool) {
+	if value, exists := r.ArgInts[name]; exists {
+		return value, true
+	}
+	return 0, false
+}
+
+// MustGetArgInt retrieves an integer positional argument value or returns the default
+func (r *ParseResult) MustGetArgInt(name string, defaultValue int) int {
+	if value, exists := r.GetArgInt(name); exists {
+		return value
+	}
+	return defaultValue
+}
+
+// GetArgBool retrieves a boolean positional argument value
+func (r *ParseResult) GetArgBool(name string) (bool, bool) {
+	if value, exists := r.ArgBools[name]; exists {
+		return value, true
+	}
+	return false, false
+}
+
+// MustGetArgBool retrieves a boolean positional argument value or returns the default
+func (r *ParseResult) MustGetArgBool(name string, defaultValue bool) bool {
+	if value, exists := r.GetArgBool(name); exists {
+		return value
+	}
+	return defaultValue
+}
+
+// GetArgDuration retrieves a duration positional argument value
+func (r *ParseResult) GetArgDuration(name string) (time.Duration, bool) {
+	if value, exists := r.ArgDurations[name]; exists {
+		return value, true
+	}
+	return 0, false
+}
+
+// MustGetArgDuration retrieves a duration positional argument value or returns the default
+func (r *ParseResult) MustGetArgDuration(name string, defaultValue time.Duration) time.Duration {
+	if value, exists := r.GetArgDuration(name); exists {
+		return value
+	}
+	return defaultValue
+}
+
+// GetArgFloat retrieves a float64 positional argument value
+func (r *ParseResult) GetArgFloat(name string) (float64, bool) {
+	if value, exists := r.ArgFloats[name]; exists {
+		return value, true
+	}
+	return 0.0, false
+}
+
+// MustGetArgFloat retrieves a float64 positional argument value or returns the default
+func (r *ParseResult) MustGetArgFloat(name string, defaultValue float64) float64 {
+	if value, exists := r.GetArgFloat(name); exists {
+		return value
+	}
+	return defaultValue
+}
+
+// GetArgStringSlice retrieves a string slice positional argument value (variadic args)
+// Uses zero-allocation slice storage pattern
+func (r *ParseResult) GetArgStringSlice(name string) ([]string, bool) {
+	if offset, exists := r.ArgStringSlices[name]; exists {
+		if offset.Start >= 0 && offset.Start < len(r.stringSlices) {
+			slice := r.stringSlices[offset.Start]
+			if slice != nil {
+				return *slice, true
+			}
+		}
+	}
+	return []string{}, false
+}
+
+// MustGetArgStringSlice retrieves a string slice positional argument value or returns the default
+func (r *ParseResult) MustGetArgStringSlice(name string, defaultValue []string) []string {
+	if value, exists := r.GetArgStringSlice(name); exists {
+		return value
+	}
+	return defaultValue
+}
+
+// GetArgIntSlice retrieves an int slice positional argument value (variadic args)
+// Uses zero-allocation slice storage pattern
+func (r *ParseResult) GetArgIntSlice(name string) ([]int, bool) {
+	if offset, exists := r.ArgIntSlices[name]; exists {
+		if offset.Start >= 0 && offset.Start < len(r.intSlices) {
+			slice := r.intSlices[offset.Start]
+			if slice != nil {
+				return *slice, true
+			}
+		}
+	}
+	return []int{}, false
+}
+
+// MustGetArgIntSlice retrieves an int slice positional argument value or returns the default
+func (r *ParseResult) MustGetArgIntSlice(name string, defaultValue []int) []int {
+	if value, exists := r.GetArgIntSlice(name); exists {
 		return value
 	}
 	return defaultValue

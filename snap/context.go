@@ -259,6 +259,93 @@ func (c *Context) GlobalIntSlice(name string) ([]int, bool) {
 	return c.Result.GetGlobalIntSlice(name)
 }
 
+// Positional argument access methods
+
+// ArgString retrieves a string positional argument value (safe access)
+func (c *Context) ArgString(name string) (string, bool) {
+	return c.Result.GetArgString(name)
+}
+
+// MustArgString retrieves a string positional argument value with default fallback
+func (c *Context) MustArgString(name, defaultValue string) string {
+	return c.Result.MustGetArgString(name, defaultValue)
+}
+
+// ArgInt retrieves an int positional argument value (safe access)
+func (c *Context) ArgInt(name string) (int, bool) {
+	return c.Result.GetArgInt(name)
+}
+
+// MustArgInt retrieves an int positional argument value with default fallback
+func (c *Context) MustArgInt(name string, defaultValue int) int {
+	return c.Result.MustGetArgInt(name, defaultValue)
+}
+
+// ArgBool retrieves a bool positional argument value (safe access)
+func (c *Context) ArgBool(name string) (bool, bool) {
+	return c.Result.GetArgBool(name)
+}
+
+// MustArgBool retrieves a bool positional argument value with default fallback
+func (c *Context) MustArgBool(name string, defaultValue bool) bool {
+	return c.Result.MustGetArgBool(name, defaultValue)
+}
+
+// ArgDuration retrieves a duration positional argument value (safe access)
+func (c *Context) ArgDuration(name string) (time.Duration, bool) {
+	return c.Result.GetArgDuration(name)
+}
+
+// MustArgDuration retrieves a duration positional argument value with default fallback
+func (c *Context) MustArgDuration(name string, defaultValue time.Duration) time.Duration {
+	return c.Result.MustGetArgDuration(name, defaultValue)
+}
+
+// ArgFloat retrieves a float64 positional argument value (safe access)
+func (c *Context) ArgFloat(name string) (float64, bool) {
+	return c.Result.GetArgFloat(name)
+}
+
+// MustArgFloat retrieves a float64 positional argument value with default fallback
+func (c *Context) MustArgFloat(name string, defaultValue float64) float64 {
+	return c.Result.MustGetArgFloat(name, defaultValue)
+}
+
+// ArgStringSlice retrieves a string slice positional argument value (variadic args)
+func (c *Context) ArgStringSlice(name string) ([]string, bool) {
+	return c.Result.GetArgStringSlice(name)
+}
+
+// MustArgStringSlice retrieves a string slice positional argument value with default fallback
+func (c *Context) MustArgStringSlice(name string, defaultValue []string) []string {
+	return c.Result.MustGetArgStringSlice(name, defaultValue)
+}
+
+// ArgIntSlice retrieves an int slice positional argument value (variadic args)
+func (c *Context) ArgIntSlice(name string) ([]int, bool) {
+	return c.Result.GetArgIntSlice(name)
+}
+
+// MustArgIntSlice retrieves an int slice positional argument value with default fallback
+func (c *Context) MustArgIntSlice(name string, defaultValue []int) []int {
+	return c.Result.MustGetArgIntSlice(name, defaultValue)
+}
+
+// Arg retrieves a raw positional argument by index (0-based)
+// Returns empty string if index is out of bounds
+func (c *Context) Arg(index int) string {
+	if index >= 0 && index < len(c.Result.Args) {
+		return c.Result.Args[index]
+	}
+	return ""
+}
+
+// RestArgs returns remaining positional arguments when using RestArgs()
+// Returns empty slice if RestArgs() was not configured
+func (c *Context) RestArgs() []string {
+	return c.Result.RestArgs
+}
+
 // Command and argument access
 
 // Command returns the executed command (implements middleware.Context interface)
@@ -313,14 +400,6 @@ func (c *Context) Binaries() []string {
 // NArgs returns the number of positional arguments
 func (c *Context) NArgs() int {
 	return len(c.Result.Args)
-}
-
-// Arg returns the positional argument at index i
-func (c *Context) Arg(i int) string {
-	if i >= 0 && i < len(c.Result.Args) {
-		return c.Result.Args[i]
-	}
-	return ""
 }
 
 // WrapperResult returns the last ExecResult produced by a wrapper when running

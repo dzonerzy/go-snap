@@ -625,6 +625,11 @@ func TestErrorDisplay_GroupViolation_ShowsGroupHelp(t *testing.T) {
 // Help/version flags should be honored at top-level and subcommand contexts
 func TestHelpAndVersionAcrossContexts(t *testing.T) {
 	app := New("tool", "desc").Version("1.0.0")
+
+	// Suppress stdout output during test to avoid polluting benchmark output
+	var buf strings.Builder
+	app.IO().WithOut(&buf).WithErr(&buf)
+
 	sub := app.Command("serve", "serves").Build()
 	// top-level --help
 	if err := app.RunWithArgs(context.Background(), []string{"--help"}); !errors.Is(err, ErrHelpShown) {

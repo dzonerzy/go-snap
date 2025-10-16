@@ -4,17 +4,18 @@
 
 # go-snap
 
-[![CI](https://github.com/dzonerzy/go-snap/actions/workflows/ci.yml/badge.svg)](https://github.com/dzonerzy/go-snap/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/dzonerzy/go-snap?include_prereleases&sort=semver)](https://github.com/dzonerzy/go-snap/releases)
-[![Go Reference](https://pkg.go.dev/badge/github.com/dzonerzy/go-snap.svg)](https://pkg.go.dev/github.com/dzonerzy/go-snap)
-[![Go Version](https://img.shields.io/badge/go-1.22%2B-blue.svg)](https://go.dev/dl/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Go Report Card](https://goreportcard.com/badge/github.com/dzonerzy/go-snap)](https://goreportcard.com/report/github.com/dzonerzy/go-snap)
+[![CI](https://github.com/dzonerzy/go-snap/actions/workflows/ci.yml/badge.svg?cache=none)](https://github.com/dzonerzy/go-snap/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/dzonerzy/go-snap?include_prereleases&sort=semver&cache=none)](https://github.com/dzonerzy/go-snap/releases)
+[![Go Reference](https://pkg.go.dev/badge/github.com/dzonerzy/go-snap.svg?cache=none)](https://pkg.go.dev/github.com/dzonerzy/go-snap)
+[![Go Version](https://img.shields.io/badge/go-1.22%2B-blue.svg?cache=none)](https://go.dev/dl/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?cache=none)](LICENSE)
+[![Go Report Card](https://goreportcard.com/badge/github.com/dzonerzy/go-snap?cache=none)](https://goreportcard.com/report/github.com/dzonerzy/go-snap)
 
 A lean, high-performance Go library for building command-line tools. go-snap focuses on zero-allocation parsing, a fluent and type-safe API, and pragmatic features that matter in real CLIs: smart errors, configuration precedence, first-class middleware, powerful wrappers for existing tools, and terminal/ANSI helpers.
 
 - Zero-allocation parser with typed storage and string interning
 - Fluent builders for apps, commands, flags, and flag groups
+- Type-safe positional arguments (required, optional, variadic, pass-through)
 - Smart suggestions for unknown flags/commands and contextual group help
 - Config from struct tags (defaults/file/env/flags) with strict precedence
 - Built-in middleware: logger, recovery, timeout, validator

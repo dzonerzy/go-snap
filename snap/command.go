@@ -17,6 +17,8 @@ type Command struct {
 	shortFlags   map[rune]*Flag // O(1) lookup for short flags
 	subcommands  map[string]*Command
 	flagGroups   []*FlagGroup // Flag groups for validation
+	args         []*Arg       // Positional arguments (ordered by position)
+	hasRestArgs  bool         // If true, collect all remaining args after declared args
 	Action       ActionFunc
 	beforeAction ActionFunc              // Runs before the action
 	afterAction  ActionFunc              // Runs after the action
@@ -173,6 +175,73 @@ func (c *CommandBuilder) IntSliceFlag(name, description string) *FlagBuilder[[]i
 	}
 	c.command.flags[name] = flag
 	return &FlagBuilder[[]int, *CommandBuilder]{flag: flag, parent: c}
+}
+
+// Positional argument methods
+
+// StringArg adds a string positional argument to the command
+func (c *CommandBuilder) StringArg(name, description string) *ArgBuilder[string, *CommandBuilder] {
+	position := len(c.command.args)
+	builder := newStringArg(name, description, position, c)
+	c.command.args = append(c.command.args, builder.arg)
+	return builder
+}
+
+// IntArg adds an integer positional argument to the command
+func (c *CommandBuilder) IntArg(name, description string) *ArgBuilder[int, *CommandBuilder] {
+	position := len(c.command.args)
+	builder := newIntArg(name, description, position, c)
+	c.command.args = append(c.command.args, builder.arg)
+	return builder
+}
+
+// BoolArg adds a boolean positional argument to the command
+func (c *CommandBuilder) BoolArg(name, description string) *ArgBuilder[bool, *CommandBuilder] {
+	position := len(c.command.args)
+	builder := newBoolArg(name, description, position, c)
+	c.command.args = append(c.command.args, builder.arg)
+	return builder
+}
+
+// FloatArg adds a float64 positional argument to the command
+func (c *CommandBuilder) FloatArg(name, description string) *ArgBuilder[float64, *CommandBuilder] {
+	position := len(c.command.args)
+	builder := newFloatArg(name, description, position, c)
+	c.command.args = append(c.command.args, builder.arg)
+	return builder
+}
+
+// DurationArg adds a duration positional argument to the command
+func (c *CommandBuilder) DurationArg(name, description string) *ArgBuilder[time.Duration, *CommandBuilder] {
+	position := len(c.command.args)
+	builder := newDurationArg(name, description, position, c)
+	c.command.args = append(c.command.args, builder.arg)
+	return builder
+}
+
+// StringSliceArg adds a string slice positional argument to the command
+// Call .Variadic() on the builder to make it accept multiple values
+func (c *CommandBuilder) StringSliceArg(name, description string) *ArgBuilder[[]string, *CommandBuilder] {
+	position := len(c.command.args)
+	builder := newStringSliceArg(name, description, position, c)
+	c.command.args = append(c.command.args, builder.arg)
+	return builder
+}
+
+// IntSliceArg adds an int slice positional argument to the command
+// Call .Variadic() on the builder to make it accept multiple values
+func (c *CommandBuilder) IntSliceArg(name, description string) *ArgBuilder[[]int, *CommandBuilder] {
+	position := len(c.command.args)
+	builder := newIntSliceArg(name, description, position, c)
+	c.command.args = append(c.command.args, builder.arg)
+	return builder
+}
+
+// RestArgs configures the command to capture all remaining positional arguments
+// after declared args. Cannot be used with .Variadic() on the last arg.
+func (c *CommandBuilder) RestArgs() *CommandBuilder {
+	c.command.hasRestArgs = true
+	return c
 }
 
 // Subcommand builder
