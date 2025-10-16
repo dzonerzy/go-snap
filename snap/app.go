@@ -49,6 +49,7 @@ type App struct {
 	versionFlag bool
 
 	// Execution context
+	action       ActionFunc // Default action when no command is matched
 	beforeAction ActionFunc
 	afterAction  ActionFunc
 
@@ -143,6 +144,12 @@ func (a *App) Before(fn ActionFunc) *App {
 // After sets a function to run after any command action
 func (a *App) After(fn ActionFunc) *App {
 	a.afterAction = fn
+	return a
+}
+
+// Action sets the default action for the app (when no command is matched)
+func (a *App) Action(fn ActionFunc) *App {
+	a.action = fn
 	return a
 }
 
@@ -248,7 +255,7 @@ func (a *App) IntSliceFlag(name, description string) *FlagBuilder[[]int, *App] {
 // Positional argument methods
 
 // StringArg adds a string positional argument to the application
-func (a *App) StringArg(name, description string) *ArgBuilder[string] {
+func (a *App) StringArg(name, description string) *ArgBuilder[string, *App] {
 	position := len(a.args)
 	builder := newStringArg(name, description, position, a)
 	a.args = append(a.args, builder.arg)
@@ -256,7 +263,7 @@ func (a *App) StringArg(name, description string) *ArgBuilder[string] {
 }
 
 // IntArg adds an integer positional argument to the application
-func (a *App) IntArg(name, description string) *ArgBuilder[int] {
+func (a *App) IntArg(name, description string) *ArgBuilder[int, *App] {
 	position := len(a.args)
 	builder := newIntArg(name, description, position, a)
 	a.args = append(a.args, builder.arg)
@@ -264,7 +271,7 @@ func (a *App) IntArg(name, description string) *ArgBuilder[int] {
 }
 
 // BoolArg adds a boolean positional argument to the application
-func (a *App) BoolArg(name, description string) *ArgBuilder[bool] {
+func (a *App) BoolArg(name, description string) *ArgBuilder[bool, *App] {
 	position := len(a.args)
 	builder := newBoolArg(name, description, position, a)
 	a.args = append(a.args, builder.arg)
@@ -272,7 +279,7 @@ func (a *App) BoolArg(name, description string) *ArgBuilder[bool] {
 }
 
 // FloatArg adds a float64 positional argument to the application
-func (a *App) FloatArg(name, description string) *ArgBuilder[float64] {
+func (a *App) FloatArg(name, description string) *ArgBuilder[float64, *App] {
 	position := len(a.args)
 	builder := newFloatArg(name, description, position, a)
 	a.args = append(a.args, builder.arg)
@@ -280,7 +287,7 @@ func (a *App) FloatArg(name, description string) *ArgBuilder[float64] {
 }
 
 // DurationArg adds a duration positional argument to the application
-func (a *App) DurationArg(name, description string) *ArgBuilder[time.Duration] {
+func (a *App) DurationArg(name, description string) *ArgBuilder[time.Duration, *App] {
 	position := len(a.args)
 	builder := newDurationArg(name, description, position, a)
 	a.args = append(a.args, builder.arg)
@@ -289,7 +296,7 @@ func (a *App) DurationArg(name, description string) *ArgBuilder[time.Duration] {
 
 // StringSliceArg adds a string slice positional argument to the application
 // Call .Variadic() on the builder to make it accept multiple values
-func (a *App) StringSliceArg(name, description string) *ArgBuilder[[]string] {
+func (a *App) StringSliceArg(name, description string) *ArgBuilder[[]string, *App] {
 	position := len(a.args)
 	builder := newStringSliceArg(name, description, position, a)
 	a.args = append(a.args, builder.arg)
@@ -298,7 +305,7 @@ func (a *App) StringSliceArg(name, description string) *ArgBuilder[[]string] {
 
 // IntSliceArg adds an int slice positional argument to the application
 // Call .Variadic() on the builder to make it accept multiple values
-func (a *App) IntSliceArg(name, description string) *ArgBuilder[[]int] {
+func (a *App) IntSliceArg(name, description string) *ArgBuilder[[]int, *App] {
 	position := len(a.args)
 	builder := newIntSliceArg(name, description, position, a)
 	a.args = append(a.args, builder.arg)
@@ -447,10 +454,16 @@ func (a *App) RunWithArgs(ctx context.Context, args []string) error {
 			}
 		}
 	} else {
-		// No command specified, check if app has a default wrapper
-		if a.defaultWrapper != nil {
+		// No command specified
+		switch {
+		case a.action != nil:
+			// Execute app-level action (if defined)
+			wrappedAction := a.wrapActionWithMiddleware(a.action, nil)
+			actionErr = wrappedAction(execCtx)
+		case a.defaultWrapper != nil:
+			// Check if app has a default wrapper
 			actionErr = a.defaultWrapper.run(execCtx, args)
-		} else {
+		default:
 			// Default to help
 			actionErr = a.showHelp()
 		}

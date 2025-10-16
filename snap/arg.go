@@ -54,21 +54,23 @@ func (a *Arg) IsVariadic() bool {
 	return a.Variadic
 }
 
-// ArgBuilder provides a fluent interface for building positional arguments
-type ArgBuilder[T any] struct {
-	arg       *Arg
-	parentApp *App            // Set if parent is *App
-	parentCmd *CommandBuilder // Set if parent is *CommandBuilder
+// ArgBuilder provides a fluent interface for building positional arguments.
+// Similar to FlagBuilder, it uses two type parameters:
+// - T: the value type (string, int, bool, etc.)
+// - P: the parent type (*App or *CommandBuilder)
+type ArgBuilder[T any, P any] struct {
+	arg    *Arg
+	parent P
 }
 
-// Required marks the argument as required
-func (b *ArgBuilder[T]) Required() *ArgBuilder[T] {
+// Required marks the argument as required and returns the builder for chaining
+func (b *ArgBuilder[T, P]) Required() *ArgBuilder[T, P] {
 	b.arg.Required = true
 	return b
 }
 
-// Default sets the default value for an optional argument
-func (b *ArgBuilder[T]) Default(value T) *ArgBuilder[T] {
+// Default sets the default value for an optional argument and returns parent for chaining
+func (b *ArgBuilder[T, P]) Default(value T) P {
 	b.arg.Required = false
 	switch any(value).(type) {
 	case string:
@@ -86,41 +88,26 @@ func (b *ArgBuilder[T]) Default(value T) *ArgBuilder[T] {
 	case []int:
 		b.arg.DefaultIntSlice = any(value).([]int)
 	}
-	return b
+	return b.parent
 }
 
 // Variadic marks the argument as variadic (accepts multiple values)
 // Only valid for StringSliceArg and must be the last positional argument
-func (b *ArgBuilder[T]) Variadic() *ArgBuilder[T] {
+// Returns parent to complete the chain
+func (b *ArgBuilder[T, P]) Variadic() P {
 	b.arg.Variadic = true
-	return b
+	return b.parent
 }
 
-// Validate adds a validation function for the argument
-func (b *ArgBuilder[T]) Validate(fn func(T) error) *ArgBuilder[T] {
+// Validate adds a validation function for the argument and returns builder for chaining
+func (b *ArgBuilder[T, P]) Validate(fn func(T) error) *ArgBuilder[T, P] {
 	b.arg.Validator = fn
 	return b
 }
 
-// App returns to the parent App builder (panics if parent is not *App)
-func (b *ArgBuilder[T]) App() *App {
-	if b.parentApp != nil {
-		return b.parentApp
-	}
-	panic("ArgBuilder parent is not *App")
-}
-
-// Command returns to the parent CommandBuilder (panics if parent is not *CommandBuilder)
-func (b *ArgBuilder[T]) Command() *CommandBuilder {
-	if b.parentCmd != nil {
-		return b.parentCmd
-	}
-	panic("ArgBuilder parent is not *CommandBuilder")
-}
-
 // Helper functions for creating argument builders
 
-func newStringArg(name, description string, position int, parent interface{}) *ArgBuilder[string] {
+func newStringArg[P any](name, description string, position int, parent P) *ArgBuilder[string, P] {
 	arg := &Arg{
 		Name:        name,
 		Description: description,
@@ -128,16 +115,10 @@ func newStringArg(name, description string, position int, parent interface{}) *A
 		Position:    position,
 		Required:    false, // Default to optional
 	}
-	builder := &ArgBuilder[string]{arg: arg}
-	if app, ok := parent.(*App); ok {
-		builder.parentApp = app
-	} else if cmd, ok := parent.(*CommandBuilder); ok {
-		builder.parentCmd = cmd
-	}
-	return builder
+	return &ArgBuilder[string, P]{arg: arg, parent: parent}
 }
 
-func newIntArg(name, description string, position int, parent interface{}) *ArgBuilder[int] {
+func newIntArg[P any](name, description string, position int, parent P) *ArgBuilder[int, P] {
 	arg := &Arg{
 		Name:        name,
 		Description: description,
@@ -145,16 +126,10 @@ func newIntArg(name, description string, position int, parent interface{}) *ArgB
 		Position:    position,
 		Required:    false,
 	}
-	builder := &ArgBuilder[int]{arg: arg}
-	if app, ok := parent.(*App); ok {
-		builder.parentApp = app
-	} else if cmd, ok := parent.(*CommandBuilder); ok {
-		builder.parentCmd = cmd
-	}
-	return builder
+	return &ArgBuilder[int, P]{arg: arg, parent: parent}
 }
 
-func newBoolArg(name, description string, position int, parent interface{}) *ArgBuilder[bool] {
+func newBoolArg[P any](name, description string, position int, parent P) *ArgBuilder[bool, P] {
 	arg := &Arg{
 		Name:        name,
 		Description: description,
@@ -162,16 +137,10 @@ func newBoolArg(name, description string, position int, parent interface{}) *Arg
 		Position:    position,
 		Required:    false,
 	}
-	builder := &ArgBuilder[bool]{arg: arg}
-	if app, ok := parent.(*App); ok {
-		builder.parentApp = app
-	} else if cmd, ok := parent.(*CommandBuilder); ok {
-		builder.parentCmd = cmd
-	}
-	return builder
+	return &ArgBuilder[bool, P]{arg: arg, parent: parent}
 }
 
-func newFloatArg(name, description string, position int, parent interface{}) *ArgBuilder[float64] {
+func newFloatArg[P any](name, description string, position int, parent P) *ArgBuilder[float64, P] {
 	arg := &Arg{
 		Name:        name,
 		Description: description,
@@ -179,16 +148,10 @@ func newFloatArg(name, description string, position int, parent interface{}) *Ar
 		Position:    position,
 		Required:    false,
 	}
-	builder := &ArgBuilder[float64]{arg: arg}
-	if app, ok := parent.(*App); ok {
-		builder.parentApp = app
-	} else if cmd, ok := parent.(*CommandBuilder); ok {
-		builder.parentCmd = cmd
-	}
-	return builder
+	return &ArgBuilder[float64, P]{arg: arg, parent: parent}
 }
 
-func newDurationArg(name, description string, position int, parent interface{}) *ArgBuilder[time.Duration] {
+func newDurationArg[P any](name, description string, position int, parent P) *ArgBuilder[time.Duration, P] {
 	arg := &Arg{
 		Name:        name,
 		Description: description,
@@ -196,16 +159,10 @@ func newDurationArg(name, description string, position int, parent interface{}) 
 		Position:    position,
 		Required:    false,
 	}
-	builder := &ArgBuilder[time.Duration]{arg: arg}
-	if app, ok := parent.(*App); ok {
-		builder.parentApp = app
-	} else if cmd, ok := parent.(*CommandBuilder); ok {
-		builder.parentCmd = cmd
-	}
-	return builder
+	return &ArgBuilder[time.Duration, P]{arg: arg, parent: parent}
 }
 
-func newStringSliceArg(name, description string, position int, parent interface{}) *ArgBuilder[[]string] {
+func newStringSliceArg[P any](name, description string, position int, parent P) *ArgBuilder[[]string, P] {
 	arg := &Arg{
 		Name:        name,
 		Description: description,
@@ -214,16 +171,10 @@ func newStringSliceArg(name, description string, position int, parent interface{
 		Required:    false,
 		Variadic:    false, // Must explicitly call .Variadic()
 	}
-	builder := &ArgBuilder[[]string]{arg: arg}
-	if app, ok := parent.(*App); ok {
-		builder.parentApp = app
-	} else if cmd, ok := parent.(*CommandBuilder); ok {
-		builder.parentCmd = cmd
-	}
-	return builder
+	return &ArgBuilder[[]string, P]{arg: arg, parent: parent}
 }
 
-func newIntSliceArg(name, description string, position int, parent interface{}) *ArgBuilder[[]int] {
+func newIntSliceArg[P any](name, description string, position int, parent P) *ArgBuilder[[]int, P] {
 	arg := &Arg{
 		Name:        name,
 		Description: description,
@@ -232,11 +183,5 @@ func newIntSliceArg(name, description string, position int, parent interface{}) 
 		Required:    false,
 		Variadic:    false, // Must explicitly call .Variadic()
 	}
-	builder := &ArgBuilder[[]int]{arg: arg}
-	if app, ok := parent.(*App); ok {
-		builder.parentApp = app
-	} else if cmd, ok := parent.(*CommandBuilder); ok {
-		builder.parentCmd = cmd
-	}
-	return builder
+	return &ArgBuilder[[]int, P]{arg: arg, parent: parent}
 }

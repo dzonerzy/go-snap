@@ -180,7 +180,7 @@ func (c *CommandBuilder) IntSliceFlag(name, description string) *FlagBuilder[[]i
 // Positional argument methods
 
 // StringArg adds a string positional argument to the command
-func (c *CommandBuilder) StringArg(name, description string) *ArgBuilder[string] {
+func (c *CommandBuilder) StringArg(name, description string) *ArgBuilder[string, *CommandBuilder] {
 	position := len(c.command.args)
 	builder := newStringArg(name, description, position, c)
 	c.command.args = append(c.command.args, builder.arg)
@@ -188,7 +188,7 @@ func (c *CommandBuilder) StringArg(name, description string) *ArgBuilder[string]
 }
 
 // IntArg adds an integer positional argument to the command
-func (c *CommandBuilder) IntArg(name, description string) *ArgBuilder[int] {
+func (c *CommandBuilder) IntArg(name, description string) *ArgBuilder[int, *CommandBuilder] {
 	position := len(c.command.args)
 	builder := newIntArg(name, description, position, c)
 	c.command.args = append(c.command.args, builder.arg)
@@ -196,7 +196,7 @@ func (c *CommandBuilder) IntArg(name, description string) *ArgBuilder[int] {
 }
 
 // BoolArg adds a boolean positional argument to the command
-func (c *CommandBuilder) BoolArg(name, description string) *ArgBuilder[bool] {
+func (c *CommandBuilder) BoolArg(name, description string) *ArgBuilder[bool, *CommandBuilder] {
 	position := len(c.command.args)
 	builder := newBoolArg(name, description, position, c)
 	c.command.args = append(c.command.args, builder.arg)
@@ -204,7 +204,7 @@ func (c *CommandBuilder) BoolArg(name, description string) *ArgBuilder[bool] {
 }
 
 // FloatArg adds a float64 positional argument to the command
-func (c *CommandBuilder) FloatArg(name, description string) *ArgBuilder[float64] {
+func (c *CommandBuilder) FloatArg(name, description string) *ArgBuilder[float64, *CommandBuilder] {
 	position := len(c.command.args)
 	builder := newFloatArg(name, description, position, c)
 	c.command.args = append(c.command.args, builder.arg)
@@ -212,7 +212,7 @@ func (c *CommandBuilder) FloatArg(name, description string) *ArgBuilder[float64]
 }
 
 // DurationArg adds a duration positional argument to the command
-func (c *CommandBuilder) DurationArg(name, description string) *ArgBuilder[time.Duration] {
+func (c *CommandBuilder) DurationArg(name, description string) *ArgBuilder[time.Duration, *CommandBuilder] {
 	position := len(c.command.args)
 	builder := newDurationArg(name, description, position, c)
 	c.command.args = append(c.command.args, builder.arg)
@@ -221,7 +221,7 @@ func (c *CommandBuilder) DurationArg(name, description string) *ArgBuilder[time.
 
 // StringSliceArg adds a string slice positional argument to the command
 // Call .Variadic() on the builder to make it accept multiple values
-func (c *CommandBuilder) StringSliceArg(name, description string) *ArgBuilder[[]string] {
+func (c *CommandBuilder) StringSliceArg(name, description string) *ArgBuilder[[]string, *CommandBuilder] {
 	position := len(c.command.args)
 	builder := newStringSliceArg(name, description, position, c)
 	c.command.args = append(c.command.args, builder.arg)
@@ -230,7 +230,7 @@ func (c *CommandBuilder) StringSliceArg(name, description string) *ArgBuilder[[]
 
 // IntSliceArg adds an int slice positional argument to the command
 // Call .Variadic() on the builder to make it accept multiple values
-func (c *CommandBuilder) IntSliceArg(name, description string) *ArgBuilder[[]int] {
+func (c *CommandBuilder) IntSliceArg(name, description string) *ArgBuilder[[]int, *CommandBuilder] {
 	position := len(c.command.args)
 	builder := newIntSliceArg(name, description, position, c)
 	c.command.args = append(c.command.args, builder.arg)
