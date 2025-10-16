@@ -672,65 +672,75 @@ func (a *App) addCommandHelpFlag(cmd *Command) {
 }
 
 // showHelp displays comprehensive application help
+// print writes formatted output to the app's IO manager output stream
+func (a *App) print(args ...interface{}) {
+	fmt.Fprint(a.IO().Out(), args...)
+}
+
+// println writes formatted output with a newline to the app's IO manager output stream
+func (a *App) println(args ...interface{}) {
+	fmt.Fprintln(a.IO().Out(), args...)
+}
+
 //
 //nolint:gocognit,funlen // Help rendering involves many small branches; splitting would harm readability.
 func (a *App) showHelp() error {
 	// Application name and description
 	if a.description != "" {
-		println(a.description)
-		println()
+		a.println(a.description)
+		a.println()
 	}
 
 	// Detailed help text if available
 	if a.helpText != "" {
-		println(a.helpText)
-		println()
+		a.println(a.helpText)
+		a.println()
 	}
 
 	// Usage line
-	println("Usage:")
-	print("  ", a.name)
+	a.println("Usage:")
+	a.print("  ", a.name)
 	if len(a.flags) > 0 {
-		print(" [GLOBAL FLAGS]")
+		a.print(" [GLOBAL FLAGS]")
 	}
 
 	// Show positional arguments in usage line
 	if len(a.args) > 0 {
 		for _, arg := range a.args {
-			print(" ")
+			a.print(" ")
 			if arg.Required {
-				print("<", arg.Name, ">")
+				a.print("<", arg.Name, ">")
 			} else {
-				print("[", arg.Name, "]")
+				a.print("[", arg.Name, "]")
 			}
 			if arg.Variadic {
-				print("...")
+				a.print("...")
 			}
 		}
 	} else if a.hasRestArgs {
-		print(" [args...]")
+		a.print(" [args...]")
 	}
 
 	if len(a.commands) > 0 {
-		print(" COMMAND [COMMAND FLAGS]")
+		a.print(" COMMAND [COMMAND FLAGS]")
 	}
-	println()
+	a.println()
 
 	// Version information
 	if a.version != "" {
-		println()
-		println("Version:", a.version)
+		a.println()
+		a.println("Version:", a.version)
 	}
 
 	// Authors information
 	if len(a.authors) > 0 {
-		println()
+		a.println()
 		if len(a.authors) == 1 {
-			println("Author:", a.authors[0].Name, "<"+a.authors[0].Email+">")
+			a.println("Author:", a.authors[0].Name, "<"+a.authors[0].Email+">")
 		} else {
-			println("Authors:")
+			a.println("Authors:")
 			for _, author := range a.authors {
-				println("  ", author.Name, "<"+author.Email+">")
+				a.println("  ", author.Name, "<"+author.Email+">")
 			}
 		}
 	}
@@ -740,33 +750,33 @@ func (a *App) showHelp() error {
 
 	// Positional arguments
 	if len(a.args) > 0 {
-		println()
-		println("Arguments:")
+		a.println()
+		a.println("Arguments:")
 		for _, arg := range a.args {
-			print("  ")
+			a.print("  ")
 			if arg.Required {
-				print("<", arg.Name, ">")
+				a.print("<", arg.Name, ">")
 			} else {
-				print("[", arg.Name, "]")
+				a.print("[", arg.Name, "]")
 			}
 			if arg.Variadic {
-				print("...")
+				a.print("...")
 			}
 			if arg.Description != "" {
-				print("\t", arg.Description)
+				a.print("\t", arg.Description)
 			}
-			println()
+			a.println()
 		}
 	} else if a.hasRestArgs {
-		println()
-		println("Arguments:")
-		println("  [args...]\tAll remaining arguments are passed through")
+		a.println()
+		a.println("Arguments:")
+		a.println("  [args...]\tAll remaining arguments are passed through")
 	}
 
 	// Commands (deterministic order)
 	if len(a.commands) > 0 { //nolint:nestif // help rendering uses explicit nested branches for clarity
-		println()
-		println("Commands:")
+		a.println()
+		a.println("Commands:")
 		names := make([]string, 0, len(a.commands))
 		for name := range a.commands {
 			if !a.commands[name].Hidden {
@@ -791,32 +801,32 @@ func (a *App) showHelp() error {
 
 		for _, name := range names {
 			cmd := a.commands[name]
-			print("  ", name)
+			a.print("  ", name)
 			if cmd.Description() != "" {
 				// Add padding to align descriptions
 				padding := maxNameLen - len(name)
 				for range padding {
-					print(" ")
+					a.print(" ")
 				}
-				print("\t", cmd.Description())
+				a.print("\t", cmd.Description())
 			}
 			if len(cmd.Aliases) > 0 {
-				print(" (aliases: ")
+				a.print(" (aliases: ")
 				for i, alias := range cmd.Aliases {
 					if i > 0 {
-						print(", ")
+						a.print(", ")
 					}
-					print(alias)
+					a.print(alias)
 				}
-				print(")")
+				a.print(")")
 			}
-			println()
+			a.println()
 		}
 	}
 
 	// Footer
-	println()
-	println("Use \"" + a.name + " COMMAND --help\" for more information about a command.")
+	a.println()
+	a.println("Use \"" + a.name + " COMMAND --help\" for more information about a command.")
 
 	return nil
 }
@@ -879,11 +889,11 @@ func (a *App) showOrganizedFlags() {
 	// Show flag groups first (sorted)
 	//nolint:dupl // Similar to command flag rendering but operates on app-level flags
 	for _, group := range groups {
-		println()
+		a.println()
 		if group.Description != "" {
-			println(group.Name + " - " + group.Description + ":")
+			a.println(group.Name + " - " + group.Description + ":")
 		} else {
-			println(group.Name + ":")
+			a.println(group.Name + ":")
 		}
 
 		// sort flags by name
@@ -907,17 +917,17 @@ func (a *App) showOrganizedFlags() {
 		// Show constraint info
 		constraintDesc := a.formatGroupConstraint(group.Constraint)
 		if constraintDesc != "" {
-			println("  Note:", constraintDesc)
+			a.println("  Note:", constraintDesc)
 		}
 	}
 
 	// Show ungrouped flags
 	if len(ungroupedFlags) > 0 {
-		println()
+		a.println()
 		if len(a.flagGroups) > 0 {
-			println("Global Flags:")
+			a.println("Global Flags:")
 		} else {
-			println("Flags:")
+			a.println("Flags:")
 		}
 
 		// sort names
@@ -940,37 +950,37 @@ func (a *App) showOrganizedFlags() {
 
 // showFlag displays a single flag with both long and short forms
 func (a *App) showFlag(flag *Flag, maxWidth int) {
-	print("  --", flag.Name)
+	a.print("  --", flag.Name)
 
 	// Show short form if available
 	if flag.Short != 0 {
-		print(", -", string(flag.Short))
+		a.print(", -", string(flag.Short))
 	}
 
 	// Show value type for non-boolean flags
 	if flag.Type != FlagTypeBool {
-		print(" value")
+		a.print(" value")
 	}
 
 	// Add padding to align descriptions
 	currentWidth := flagDisplayWidth(flag)
 	padding := maxWidth - currentWidth
 	for range padding {
-		print(" ")
+		a.print(" ")
 	}
 
 	// Show description
 	if flag.Description != "" {
-		print("\t", flag.Description)
+		a.print("\t", flag.Description)
 	}
 
 	// Show default value if present
 	defaultValue := a.getDefaultValue(flag)
 	if defaultValue != "" {
-		print(" (default: ", defaultValue, ")")
+		a.print(" (default: ", defaultValue, ")")
 	}
 
-	println()
+	a.println()
 }
 
 // formatGroupConstraint returns a human-readable constraint description
@@ -1045,7 +1055,7 @@ func (a *App) getDefaultValue(flag *Flag) string {
 
 // showVersion displays application version
 func (a *App) showVersion() error {
-	println(a.name, a.version)
+	a.println(a.name, a.version)
 	return nil
 }
 
@@ -1054,42 +1064,42 @@ func (a *App) showVersion() error {
 //nolint:gocognit // Command help rendering prioritizes clarity over reduced nesting.
 func (a *App) showCommandHelp(cmd *Command) error {
 	// Command name and description
-	println(cmd.Description())
-	println()
+	a.println(cmd.Description())
+	a.println()
 
 	// Usage line
-	println("Usage:")
-	print("  ", a.name, " ", cmd.Name())
+	a.println("Usage:")
+	a.print("  ", a.name, " ", cmd.Name())
 	if len(cmd.flags) > 0 {
-		print(" [FLAGS]")
+		a.print(" [FLAGS]")
 	}
 
 	// Show positional arguments in usage line
 	if len(cmd.args) > 0 {
 		for _, arg := range cmd.args {
-			print(" ")
+			a.print(" ")
 			if arg.Required {
-				print("<", arg.Name, ">")
+				a.print("<", arg.Name, ">")
 			} else {
-				print("[", arg.Name, "]")
+				a.print("[", arg.Name, "]")
 			}
 			if arg.Variadic {
-				print("...")
+				a.print("...")
 			}
 		}
 	} else if cmd.hasRestArgs {
-		print(" [args...]")
+		a.print(" [args...]")
 	}
 
 	if len(cmd.subcommands) > 0 {
-		print(" SUBCOMMAND")
+		a.print(" SUBCOMMAND")
 	}
-	println()
+	a.println()
 
 	// Long help text if available
 	if cmd.HelpText != "" {
-		println()
-		println(cmd.HelpText)
+		a.println()
+		a.println(cmd.HelpText)
 	}
 
 	// Command-specific flags (organized by groups, deterministic order)
@@ -1097,33 +1107,33 @@ func (a *App) showCommandHelp(cmd *Command) error {
 
 	// Positional arguments
 	if len(cmd.args) > 0 {
-		println()
-		println("Arguments:")
+		a.println()
+		a.println("Arguments:")
 		for _, arg := range cmd.args {
-			print("  ")
+			a.print("  ")
 			if arg.Required {
-				print("<", arg.Name, ">")
+				a.print("<", arg.Name, ">")
 			} else {
-				print("[", arg.Name, "]")
+				a.print("[", arg.Name, "]")
 			}
 			if arg.Variadic {
-				print("...")
+				a.print("...")
 			}
 			if arg.Description != "" {
-				print("\t", arg.Description)
+				a.print("\t", arg.Description)
 			}
-			println()
+			a.println()
 		}
 	} else if cmd.hasRestArgs {
-		println()
-		println("Arguments:")
-		println("  [args...]\tAll remaining arguments are passed through")
+		a.println()
+		a.println("Arguments:")
+		a.println("  [args...]\tAll remaining arguments are passed through")
 	}
 
 	// Subcommands (sorted)
 	if len(cmd.subcommands) > 0 { //nolint:nestif // help rendering uses explicit nested branches for clarity
-		println()
-		println("Subcommands:")
+		a.println()
+		a.println("Subcommands:")
 		names := make([]string, 0, len(cmd.subcommands))
 		for name, sc := range cmd.subcommands {
 			if !sc.Hidden {
@@ -1139,27 +1149,27 @@ func (a *App) showCommandHelp(cmd *Command) error {
 		}
 		for _, name := range names {
 			subcmd := cmd.subcommands[name]
-			print("  ", name)
+			a.print("  ", name)
 			if subcmd.Description() != "" {
-				print("\t", subcmd.Description())
+				a.print("\t", subcmd.Description())
 			}
 			if len(subcmd.Aliases) > 0 {
-				print(" (aliases: ")
+				a.print(" (aliases: ")
 				for i, alias := range subcmd.Aliases {
 					if i > 0 {
-						print(", ")
+						a.print(", ")
 					}
-					print(alias)
+					a.print(alias)
 				}
-				print(")")
+				a.print(")")
 			}
-			println()
+			a.println()
 		}
 	}
 
 	// Footer
-	println()
-	println("Use \"" + a.name + " " + cmd.Name() + " SUBCOMMAND --help\" for more information about a subcommand.")
+	a.println()
+	a.println("Use \"" + a.name + " " + cmd.Name() + " SUBCOMMAND --help\" for more information about a subcommand.")
 
 	return nil
 }
@@ -1194,11 +1204,11 @@ func (a *App) showOrganizedCommandFlags(cmd *Command) {
 	// Print groups
 	//nolint:dupl // Similar to app flag rendering but operates on command-level flags
 	for _, g := range cmd.flagGroups {
-		println()
+		a.println()
 		if g.Description != "" {
-			println(g.Name + " - " + g.Description + ":")
+			a.println(g.Name + " - " + g.Description + ":")
 		} else {
-			println(g.Name + ":")
+			a.println(g.Name + ":")
 		}
 		// deterministic order
 		names := make([]string, 0, len(g.Flags))
@@ -1220,7 +1230,7 @@ func (a *App) showOrganizedCommandFlags(cmd *Command) {
 		}
 		constraintDesc := a.formatGroupConstraint(g.Constraint)
 		if constraintDesc != "" {
-			println("  Note:", constraintDesc)
+			a.println("  Note:", constraintDesc)
 		}
 	}
 
@@ -1240,8 +1250,8 @@ func (a *App) showOrganizedCommandFlags(cmd *Command) {
 				}
 			}
 		}
-		println()
-		println("Flags:")
+		a.println()
+		a.println("Flags:")
 		for _, name := range ungrouped {
 			a.showFlag(cmd.flags[name], maxWidth)
 		}

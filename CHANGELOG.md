@@ -34,15 +34,43 @@
 - Context methods for positional arguments:
   * `ctx.Arg(index)` - Get raw positional arg by index
   * `ctx.RestArgs()` - Get all remaining args when using `RestArgs()`
+  * `ctx.StringArg()`, `ctx.IntArg()`, `ctx.BoolArg()`, `ctx.FloatArg()`, `ctx.DurationArg()` - Type-safe accessors
+  * `ctx.StringSliceArg()`, `ctx.IntSliceArg()` - Slice accessors for variadic arguments
   * Existing `ctx.Args()` now returns only unparsed positional args (after named args consumed)
+
+- **Fluent API chaining** with `.Back()` method for ArgBuilder
+  * Consistent with FlagBuilder pattern
+  * Example: `app.StringArg("source", "Source file").Required().Back().StringArg("dest", "Destination").Default("out.txt")`
+
+- **App-level action** with `app.Action(fn)` method
+  * Execute action when no command is matched
+  * Falls back to help if no action defined
+  * Enables standalone app behavior without requiring commands
+
+- **Zero-allocation parsing** for positional arguments
+  * Uses typed maps (ArgStrings, ArgInts, etc.) to avoid interface{} boxing
+  * Pooled slices for variadic arguments
+  * Slice offset pattern for zero-alloc slice access
+  * Benchmarks: 0 B/op, 0 allocs/op maintained
+
+- New examples demonstrating positional arguments:
+  * `examples/positional-args` - Basic positional argument usage with all types
+  * `examples/variadic-args` - Variadic arguments and RestArgs pass-through
 
 ### Changed
 - Help output now displays positional arguments in usage line:
   * Named args: `myapp <filename> [count]`
   * Variadic args: `myapp rm <files>...`
   * Rest args: `myapp run <script> [args...]`
+- Help output includes "Arguments:" section with descriptions
+- Help flag (`--help`) now has priority over required argument validation
+  * `--help` works even when required args are missing
+  * Allows users to see help before providing all required arguments
 - Parser validates positional argument count against declared requirements
 - `ctx.Args()` behavior: returns remaining positional args after named args are consumed
+- ArgBuilder now uses two type parameters `ArgBuilder[T, P]` matching FlagBuilder pattern
+- `.Required()` and `.Validate()` return `*ArgBuilder[T, P]` for chaining
+- `.Default()` and `.Variadic()` return parent type `P` to complete chain
 
 ## [0.1.3] - 2025-10-16
 
