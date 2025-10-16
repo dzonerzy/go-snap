@@ -37,10 +37,12 @@ type App struct {
 	authors     []Author
 
 	// Internal storage
-	flags      map[string]*Flag
-	shortFlags map[rune]*Flag // O(1) lookup for short flags
-	commands   map[string]*Command
-	flagGroups []*FlagGroup // Flag groups for validation
+	flags       map[string]*Flag
+	shortFlags  map[rune]*Flag // O(1) lookup for short flags
+	commands    map[string]*Command
+	flagGroups  []*FlagGroup // Flag groups for validation
+	args        []*Arg       // Positional arguments (ordered by position)
+	hasRestArgs bool         // If true, collect all remaining args after declared args
 
 	// Global configuration
 	helpFlag    bool
@@ -241,6 +243,73 @@ func (a *App) IntSliceFlag(name, description string) *FlagBuilder[[]int, *App] {
 	}
 	a.flags[name] = flag
 	return &FlagBuilder[[]int, *App]{flag: flag, parent: a}
+}
+
+// Positional argument methods
+
+// StringArg adds a string positional argument to the application
+func (a *App) StringArg(name, description string) *ArgBuilder[string] {
+	position := len(a.args)
+	builder := newStringArg(name, description, position, a)
+	a.args = append(a.args, builder.arg)
+	return builder
+}
+
+// IntArg adds an integer positional argument to the application
+func (a *App) IntArg(name, description string) *ArgBuilder[int] {
+	position := len(a.args)
+	builder := newIntArg(name, description, position, a)
+	a.args = append(a.args, builder.arg)
+	return builder
+}
+
+// BoolArg adds a boolean positional argument to the application
+func (a *App) BoolArg(name, description string) *ArgBuilder[bool] {
+	position := len(a.args)
+	builder := newBoolArg(name, description, position, a)
+	a.args = append(a.args, builder.arg)
+	return builder
+}
+
+// FloatArg adds a float64 positional argument to the application
+func (a *App) FloatArg(name, description string) *ArgBuilder[float64] {
+	position := len(a.args)
+	builder := newFloatArg(name, description, position, a)
+	a.args = append(a.args, builder.arg)
+	return builder
+}
+
+// DurationArg adds a duration positional argument to the application
+func (a *App) DurationArg(name, description string) *ArgBuilder[time.Duration] {
+	position := len(a.args)
+	builder := newDurationArg(name, description, position, a)
+	a.args = append(a.args, builder.arg)
+	return builder
+}
+
+// StringSliceArg adds a string slice positional argument to the application
+// Call .Variadic() on the builder to make it accept multiple values
+func (a *App) StringSliceArg(name, description string) *ArgBuilder[[]string] {
+	position := len(a.args)
+	builder := newStringSliceArg(name, description, position, a)
+	a.args = append(a.args, builder.arg)
+	return builder
+}
+
+// IntSliceArg adds an int slice positional argument to the application
+// Call .Variadic() on the builder to make it accept multiple values
+func (a *App) IntSliceArg(name, description string) *ArgBuilder[[]int] {
+	position := len(a.args)
+	builder := newIntSliceArg(name, description, position, a)
+	a.args = append(a.args, builder.arg)
+	return builder
+}
+
+// RestArgs configures the app to capture all remaining positional arguments
+// after declared args. Cannot be used with .Variadic() on the last arg.
+func (a *App) RestArgs() *App {
+	a.hasRestArgs = true
+	return a
 }
 
 // Command builder

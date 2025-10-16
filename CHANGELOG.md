@@ -3,7 +3,7 @@
 ## [Unreleased] - v0.2.0
 
 ### Added
-- **Type-safe positional arguments** with `StringArg()`, `IntArg()`, `BoolArg()`, `FloatArg()`, `DurationArg()`
+- **Type-safe positional arguments** with `StringArg()`, `IntArg()`, `BoolArg()`, `FloatArg()`, `DurationArg()`, `StringSliceArg()`, `IntSliceArg()`
   * Incremental declaration: first arg is position 0, second is position 1, etc.
   * Support at both app-level and command-level
   * Required vs optional arguments with `.Required()` and `.Default(value)`
@@ -13,14 +13,14 @@
   * Validation: enforces required arg count before action execution
   * Example: `app.StringArg("filename", "Input file").Required().IntArg("count", "Number of items").Default(10)`
 
-- **Variadic positional arguments** with `StringSliceArg().Variadic()`
+- **Variadic positional arguments** with `StringSliceArg().Variadic()` and `IntSliceArg().Variadic()`
   * Collect multiple values for the last positional argument
-  * Type-safe: `ctx.StringSlice("files")` returns `[]string`
+  * Type-safe: `ctx.StringSlice("files")` returns `[]string`, `ctx.IntSlice("ports")` returns `[]int`
   * Can be required (1+ items) or optional with default (0+ items)
   * Help shows as `<files>...` for required or `[files]...` for optional
   * Only last argument can be variadic
   * Example: `app.Command("rm").StringSliceArg("files", "Files to remove").Required().Variadic()`
-  * Use cases: `rm file1 file2 file3`, `tar -czf out.tar file1 file2 file3`
+  * Use cases: `rm file1 file2 file3`, `tar -czf out.tar file1 file2 file3`, `listen 8080 8081 8082`
 
 - **Rest arguments** with `RestArgs()` for pass-through scenarios
   * Captures all remaining arguments after declared positional args as raw strings

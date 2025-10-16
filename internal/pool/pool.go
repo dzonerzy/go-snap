@@ -250,7 +250,17 @@ type ParseResult struct {
 	GlobalStringSliceOffsets map[string]SliceOffset
 	GlobalIntSliceOffsets    map[string]SliceOffset
 
-	Args []string
+	// Positional argument typed maps (by argument name)
+	ArgStrings      map[string]string
+	ArgInts         map[string]int
+	ArgBools        map[string]bool
+	ArgDurations    map[string]time.Duration
+	ArgFloats       map[string]float64
+	ArgStringSlices map[string]SliceOffset // For variadic string args
+	ArgIntSlices    map[string]SliceOffset // For variadic int args
+
+	Args     []string // Raw positional arguments after parsing
+	RestArgs []string // Remaining args when using RestArgs()
 }
 
 // SliceOffset tracks start and end positions in global buffers
@@ -284,7 +294,17 @@ func NewParseResultPool() *ParseResultPool {
 					GlobalStringSliceOffsets: make(map[string]SliceOffset, 2),
 					GlobalIntSliceOffsets:    make(map[string]SliceOffset, 2),
 
-					Args: make([]string, 0, 8),
+					// Positional arguments
+					ArgStrings:      make(map[string]string, 4),
+					ArgInts:         make(map[string]int, 4),
+					ArgBools:        make(map[string]bool, 4),
+					ArgDurations:    make(map[string]time.Duration, 2),
+					ArgFloats:       make(map[string]float64, 2),
+					ArgStringSlices: make(map[string]SliceOffset, 2),
+					ArgIntSlices:    make(map[string]SliceOffset, 2),
+
+					Args:     make([]string, 0, 8),
+					RestArgs: make([]string, 0, 4),
 				}
 			},
 			func(result *ParseResult) {
@@ -307,7 +327,17 @@ func NewParseResultPool() *ParseResultPool {
 				clearMap(result.GlobalStringSliceOffsets)
 				clearMap(result.GlobalIntSliceOffsets)
 
+				// Clear positional argument maps
+				clearMap(result.ArgStrings)
+				clearMap(result.ArgInts)
+				clearMap(result.ArgBools)
+				clearMap(result.ArgDurations)
+				clearMap(result.ArgFloats)
+				clearMap(result.ArgStringSlices)
+				clearMap(result.ArgIntSlices)
+
 				result.Args = result.Args[:0]
+				result.RestArgs = result.RestArgs[:0]
 			},
 		),
 	}
