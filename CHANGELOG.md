@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] - v0.2.0
+## [0.2.0] - 2025-10-16
 
 ### Added
 - **Type-safe positional arguments** with `StringArg()`, `IntArg()`, `BoolArg()`, `FloatArg()`, `DurationArg()`, `StringSliceArg()`, `IntSliceArg()`
@@ -97,4 +97,3 @@
 
 ### Fixed
 - Unknown subcommand surfaced and suggestions improved (prefers child suggestions).
-

@@ -1898,6 +1898,132 @@ func (r *ParseResult) MustGetGlobalIntSlice(name string, defaultValue []int) []i
 	return defaultValue
 }
 
+// Positional argument access methods (zero-allocation)
+
+// GetArgString retrieves a string positional argument value
+func (r *ParseResult) GetArgString(name string) (string, bool) {
+	if value, exists := r.ArgStrings[name]; exists {
+		return value, true
+	}
+	return "", false
+}
+
+// MustGetArgString retrieves a string positional argument value or returns the default
+func (r *ParseResult) MustGetArgString(name, defaultValue string) string {
+	if value, exists := r.GetArgString(name); exists {
+		return value
+	}
+	return defaultValue
+}
+
+// GetArgInt retrieves an integer positional argument value
+func (r *ParseResult) GetArgInt(name string) (int, bool) {
+	if value, exists := r.ArgInts[name]; exists {
+		return value, true
+	}
+	return 0, false
+}
+
+// MustGetArgInt retrieves an integer positional argument value or returns the default
+func (r *ParseResult) MustGetArgInt(name string, defaultValue int) int {
+	if value, exists := r.GetArgInt(name); exists {
+		return value
+	}
+	return defaultValue
+}
+
+// GetArgBool retrieves a boolean positional argument value
+func (r *ParseResult) GetArgBool(name string) (bool, bool) {
+	if value, exists := r.ArgBools[name]; exists {
+		return value, true
+	}
+	return false, false
+}
+
+// MustGetArgBool retrieves a boolean positional argument value or returns the default
+func (r *ParseResult) MustGetArgBool(name string, defaultValue bool) bool {
+	if value, exists := r.GetArgBool(name); exists {
+		return value
+	}
+	return defaultValue
+}
+
+// GetArgDuration retrieves a duration positional argument value
+func (r *ParseResult) GetArgDuration(name string) (time.Duration, bool) {
+	if value, exists := r.ArgDurations[name]; exists {
+		return value, true
+	}
+	return 0, false
+}
+
+// MustGetArgDuration retrieves a duration positional argument value or returns the default
+func (r *ParseResult) MustGetArgDuration(name string, defaultValue time.Duration) time.Duration {
+	if value, exists := r.GetArgDuration(name); exists {
+		return value
+	}
+	return defaultValue
+}
+
+// GetArgFloat retrieves a float64 positional argument value
+func (r *ParseResult) GetArgFloat(name string) (float64, bool) {
+	if value, exists := r.ArgFloats[name]; exists {
+		return value, true
+	}
+	return 0.0, false
+}
+
+// MustGetArgFloat retrieves a float64 positional argument value or returns the default
+func (r *ParseResult) MustGetArgFloat(name string, defaultValue float64) float64 {
+	if value, exists := r.GetArgFloat(name); exists {
+		return value
+	}
+	return defaultValue
+}
+
+// GetArgStringSlice retrieves a string slice positional argument value (variadic args)
+// Uses zero-allocation slice storage pattern
+func (r *ParseResult) GetArgStringSlice(name string) ([]string, bool) {
+	if offset, exists := r.ArgStringSlices[name]; exists {
+		if offset.Start >= 0 && offset.Start < len(r.stringSlices) {
+			slice := r.stringSlices[offset.Start]
+			if slice != nil {
+				return *slice, true
+			}
+		}
+	}
+	return []string{}, false
+}
+
+// MustGetArgStringSlice retrieves a string slice positional argument value or returns the default
+func (r *ParseResult) MustGetArgStringSlice(name string, defaultValue []string) []string {
+	if value, exists := r.GetArgStringSlice(name); exists {
+		return value
+	}
+	return defaultValue
+}
+
+// GetArgIntSlice retrieves an int slice positional argument value (variadic args)
+// Uses zero-allocation slice storage pattern
+func (r *ParseResult) GetArgIntSlice(name string) ([]int, bool) {
+	if offset, exists := r.ArgIntSlices[name]; exists {
+		if offset.Start >= 0 && offset.Start < len(r.intSlices) {
+			slice := r.intSlices[offset.Start]
+			if slice != nil {
+				return *slice, true
+			}
+		}
+	}
+	return []int{}, false
+}
+
+// MustGetArgIntSlice retrieves an int slice positional argument value or returns the default
+func (r *ParseResult) MustGetArgIntSlice(name string, defaultValue []int) []int {
+	if value, exists := r.GetArgIntSlice(name); exists {
+		return value
+	}
+	return defaultValue
+}
+
 // HasFlag returns true if the flag exists (was provided or has a default)
 func (r *ParseResult) HasFlag(name string) bool {
 	_, exists := r.StringFlags[name]
