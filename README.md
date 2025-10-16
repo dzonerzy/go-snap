@@ -15,6 +15,7 @@ A lean, high-performance Go library for building command-line tools. go-snap foc
 
 - Zero-allocation parser with typed storage and string interning
 - Fluent builders for apps, commands, flags, and flag groups
+- Type-safe positional arguments (required, optional, variadic, pass-through)
 - Smart suggestions for unknown flags/commands and contextual group help
 - Config from struct tags (defaults/file/env/flags) with strict precedence
 - Built-in middleware: logger, recovery, timeout, validator
