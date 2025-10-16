@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.3] - 2025-10-16
+
+### Fixed
+- Flag descriptions now properly aligned in help output regardless of flag name and option lengths
+
 ## [0.1.2] - 2025-10-16
 
 ### Added
