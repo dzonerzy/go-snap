@@ -694,6 +694,23 @@ func (a *App) showHelp() error {
 		print(" [GLOBAL FLAGS]")
 	}
 
+	// Show positional arguments in usage line
+	if len(a.args) > 0 {
+		for _, arg := range a.args {
+			print(" ")
+			if arg.Required {
+				print("<", arg.Name, ">")
+			} else {
+				print("[", arg.Name, "]")
+			}
+			if arg.Variadic {
+				print("...")
+			}
+		}
+	} else if a.hasRestArgs {
+		print(" [args...]")
+	}
+
 	if len(a.commands) > 0 {
 		print(" COMMAND [COMMAND FLAGS]")
 	}
@@ -720,6 +737,31 @@ func (a *App) showHelp() error {
 
 	// Show flags organized by groups
 	a.showOrganizedFlags()
+
+	// Positional arguments
+	if len(a.args) > 0 {
+		println()
+		println("Arguments:")
+		for _, arg := range a.args {
+			print("  ")
+			if arg.Required {
+				print("<", arg.Name, ">")
+			} else {
+				print("[", arg.Name, "]")
+			}
+			if arg.Variadic {
+				print("...")
+			}
+			if arg.Description != "" {
+				print("\t", arg.Description)
+			}
+			println()
+		}
+	} else if a.hasRestArgs {
+		println()
+		println("Arguments:")
+		println("  [args...]\tAll remaining arguments are passed through")
+	}
 
 	// Commands (deterministic order)
 	if len(a.commands) > 0 { //nolint:nestif // help rendering uses explicit nested branches for clarity
@@ -1022,6 +1064,23 @@ func (a *App) showCommandHelp(cmd *Command) error {
 		print(" [FLAGS]")
 	}
 
+	// Show positional arguments in usage line
+	if len(cmd.args) > 0 {
+		for _, arg := range cmd.args {
+			print(" ")
+			if arg.Required {
+				print("<", arg.Name, ">")
+			} else {
+				print("[", arg.Name, "]")
+			}
+			if arg.Variadic {
+				print("...")
+			}
+		}
+	} else if cmd.hasRestArgs {
+		print(" [args...]")
+	}
+
 	if len(cmd.subcommands) > 0 {
 		print(" SUBCOMMAND")
 	}
@@ -1035,6 +1094,31 @@ func (a *App) showCommandHelp(cmd *Command) error {
 
 	// Command-specific flags (organized by groups, deterministic order)
 	a.showOrganizedCommandFlags(cmd)
+
+	// Positional arguments
+	if len(cmd.args) > 0 {
+		println()
+		println("Arguments:")
+		for _, arg := range cmd.args {
+			print("  ")
+			if arg.Required {
+				print("<", arg.Name, ">")
+			} else {
+				print("[", arg.Name, "]")
+			}
+			if arg.Variadic {
+				print("...")
+			}
+			if arg.Description != "" {
+				print("\t", arg.Description)
+			}
+			println()
+		}
+	} else if cmd.hasRestArgs {
+		println()
+		println("Arguments:")
+		println("  [args...]\tAll remaining arguments are passed through")
+	}
 
 	// Subcommands (sorted)
 	if len(cmd.subcommands) > 0 { //nolint:nestif // help rendering uses explicit nested branches for clarity

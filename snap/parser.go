@@ -717,6 +717,13 @@ func (p *Parser) processPositionalArgs(result *ParseResult) error {
 		return nil
 	}
 
+	// Check if help flag is set - skip required validation if help is requested
+	helpRequested := result.MustGetBool("help", false)
+	if !helpRequested {
+		// Also check global help flag
+		helpRequested = result.MustGetGlobalBool("help", false)
+	}
+
 	// Check for RestArgs mode: collect all remaining args
 	if hasRestArgs {
 		result.RestArgs = append(result.RestArgs[:0], p.argsBuffer...)
@@ -753,7 +760,7 @@ func (p *Parser) processPositionalArgs(result *ParseResult) error {
 			// Collect all remaining args into variadic slice
 			remaining := p.argsBuffer[argIndex:]
 
-			if len(remaining) == 0 && argDef.Required {
+			if len(remaining) == 0 && argDef.Required && !helpRequested {
 				return &ParseError{
 					Type:    ErrorTypeInvalidArgument,
 					Message: "missing required variadic argument: " + argDef.Name,
@@ -773,7 +780,7 @@ func (p *Parser) processPositionalArgs(result *ParseResult) error {
 		// Regular (non-variadic) arg
 		if argIndex >= numProvidedArgs {
 			// No more args provided
-			if argDef.Required {
+			if argDef.Required && !helpRequested {
 				return &ParseError{
 					Type:    ErrorTypeInvalidArgument,
 					Message: "missing required argument: " + argDef.Name,
