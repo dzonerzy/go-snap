@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.2] - 2025-01-20
+
+### Fixed
+- **Logger color handling**: `LogFormatPlain` now correctly applies semantic colors while omitting prefixes
+  * Previously returned uncolored text in plain format
+  * Plain format now means "no prefix" not "no color"
+  * Debug messages still purple, info blue, success green, warning yellow, error red
+- **Code quality improvements**: Resolved all golangci-lint issues
+  * Extracted duplicate argument printing logic into `printArgumentsSection()` helper method
+  * Fixed variable shadowing in `io_unix.go` color detection
+  * Fixed built-in `cap` redefinition in color capability detection
+  * Simplified argument width calculation to eliminate duplicate branches
+  * Reduced cyclomatic complexity in help rendering functions
+
 ## [0.2.1] - 2025-01-19
 
 ### Added
