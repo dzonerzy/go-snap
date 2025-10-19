@@ -694,8 +694,59 @@ func (a *App) println(args ...interface{}) {
 	fmt.Fprintln(a.IO().Out(), args...)
 }
 
+// printArgumentsSection prints the Arguments section for help output
+func (a *App) printArgumentsSection(args []*Arg, hasRestArgs bool) {
+	//nolint:nestif // Help rendering naturally has nested structures
+	if len(args) > 0 {
+		a.println()
+		a.println("Arguments:")
+
+		// Calculate max argument name width for alignment
+		maxArgWidth := 0
+		for _, arg := range args {
+			width := 2 + 2 + len(arg.Name) // "  " prefix + brackets/angles + name
+			if arg.Variadic {
+				width += 3 // "..."
+			}
+			if width > maxArgWidth {
+				maxArgWidth = width
+			}
+		}
+
+		for _, arg := range args {
+			a.print("  ")
+			currentWidth := 2
+			nameWidth := len(arg.Name)
+			if arg.Required {
+				a.print("<", arg.Name, ">")
+				currentWidth += 2 + nameWidth
+			} else {
+				a.print("[", arg.Name, "]")
+				currentWidth += 2 + nameWidth
+			}
+			if arg.Variadic {
+				a.print("...")
+				currentWidth += 3
+			}
+			if arg.Description != "" {
+				// Add padding to align descriptions (spaces only, no tabs)
+				padding := maxArgWidth - currentWidth + 2 // +2 for minimum spacing
+				for range padding {
+					a.print(" ")
+				}
+				a.print(arg.Description)
+			}
+			a.println()
+		}
+	} else if hasRestArgs {
+		a.println()
+		a.println("Arguments:")
+		a.println("  [args...]  All remaining arguments are passed through")
+	}
+}
+
 //
-//nolint:gocognit,funlen,gocyclo,cyclop // Help rendering involves many small branches; splitting would harm readability.
+//nolint:gocognit,funlen // Help rendering involves many small branches; splitting would harm readability.
 func (a *App) showHelp() error {
 	// Application name and description
 	if a.description != "" {
@@ -761,57 +812,7 @@ func (a *App) showHelp() error {
 	a.showOrganizedFlags()
 
 	// Positional arguments
-	//nolint:nestif // Help rendering naturally has nested structures
-	if len(a.args) > 0 {
-		a.println()
-		a.println("Arguments:")
-
-		// Calculate max argument name width for alignment
-		maxArgWidth := 0
-		for _, arg := range a.args {
-			width := 2 // "  " prefix
-			if arg.Required {
-				width += 2 + len(arg.Name) // "<name>"
-			} else {
-				width += 2 + len(arg.Name) // "[name]"
-			}
-			if arg.Variadic {
-				width += 3 // "..."
-			}
-			if width > maxArgWidth {
-				maxArgWidth = width
-			}
-		}
-
-		for _, arg := range a.args {
-			a.print("  ")
-			currentWidth := 2
-			if arg.Required {
-				a.print("<", arg.Name, ">")
-				currentWidth += 2 + len(arg.Name)
-			} else {
-				a.print("[", arg.Name, "]")
-				currentWidth += 2 + len(arg.Name)
-			}
-			if arg.Variadic {
-				a.print("...")
-				currentWidth += 3
-			}
-			if arg.Description != "" {
-				// Add padding to align descriptions (spaces only, no tabs)
-				padding := maxArgWidth - currentWidth + 2 // +2 for minimum spacing
-				for range padding {
-					a.print(" ")
-				}
-				a.print(arg.Description)
-			}
-			a.println()
-		}
-	} else if a.hasRestArgs {
-		a.println()
-		a.println("Arguments:")
-		a.println("  [args...]  All remaining arguments are passed through")
-	}
+	a.printArgumentsSection(a.args, a.hasRestArgs)
 
 	// Commands (deterministic order)
 	if len(a.commands) > 0 { //nolint:nestif // help rendering uses explicit nested branches for clarity
@@ -1146,57 +1147,7 @@ func (a *App) showCommandHelp(cmd *Command) error {
 	a.showOrganizedCommandFlags(cmd)
 
 	// Positional arguments
-	//nolint:nestif // Help rendering naturally has nested structures
-	if len(cmd.args) > 0 {
-		a.println()
-		a.println("Arguments:")
-
-		// Calculate max argument name width for alignment
-		maxArgWidth := 0
-		for _, arg := range cmd.args {
-			width := 2 // "  " prefix
-			if arg.Required {
-				width += 2 + len(arg.Name) // "<name>"
-			} else {
-				width += 2 + len(arg.Name) // "[name]"
-			}
-			if arg.Variadic {
-				width += 3 // "..."
-			}
-			if width > maxArgWidth {
-				maxArgWidth = width
-			}
-		}
-
-		for _, arg := range cmd.args {
-			a.print("  ")
-			currentWidth := 2
-			if arg.Required {
-				a.print("<", arg.Name, ">")
-				currentWidth += 2 + len(arg.Name)
-			} else {
-				a.print("[", arg.Name, "]")
-				currentWidth += 2 + len(arg.Name)
-			}
-			if arg.Variadic {
-				a.print("...")
-				currentWidth += 3
-			}
-			if arg.Description != "" {
-				// Add padding to align descriptions (spaces only, no tabs)
-				padding := maxArgWidth - currentWidth + 2 // +2 for minimum spacing
-				for range padding {
-					a.print(" ")
-				}
-				a.print(arg.Description)
-			}
-			a.println()
-		}
-	} else if cmd.hasRestArgs {
-		a.println()
-		a.println("Arguments:")
-		a.println("  [args...]  All remaining arguments are passed through")
-	}
+	a.printArgumentsSection(cmd.args, cmd.hasRestArgs)
 
 	// Subcommands (sorted)
 	if len(cmd.subcommands) > 0 { //nolint:nestif // help rendering uses explicit nested branches for clarity

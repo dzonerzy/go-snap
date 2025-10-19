@@ -75,7 +75,7 @@ func (u *unixPlatform) detectColorCapability() int {
 		output, err := cmd.Output()
 		if err == nil {
 			colors := strings.TrimSpace(string(output))
-			if n, err := strconv.Atoi(colors); err == nil {
+			if n, parseErr := strconv.Atoi(colors); parseErr == nil {
 				u.colorCap = n
 				return
 			}
@@ -94,14 +94,14 @@ func (u *unixPlatform) detectColorCapability() int {
 
 // colorCapabilityLevel returns the color level based on detected capability
 func (u *unixPlatform) colorCapabilityLevel() int {
-	cap := u.detectColorCapability()
-	if cap >= 16777216 {
+	capability := u.detectColorCapability()
+	if capability >= 16777216 {
 		return 3 // Truecolor
 	}
-	if cap >= 256 {
+	if capability >= 256 {
 		return 2 // 256 colors
 	}
-	if cap >= 8 {
+	if capability >= 8 {
 		return 1 // Basic 16 colors
 	}
 	return 0 // No color
