@@ -196,15 +196,7 @@ func (l *Logger) formatMessage(level LogLevel, msg string) string {
 		timeStr = " [" + time.Now().Format(l.timeFormat) + "]"
 	}
 
-	// For plain format, just return the message
-	if l.format == LogFormatPlain {
-		if l.withTime {
-			return timeStr[1:] + " " + msg // Remove leading space from timeStr
-		}
-		return msg
-	}
-
-	// Build the formatted message with color
+	// Build the formatted message
 	var formatted string
 
 	// If message is empty/whitespace, don't add prefix - just return the original message
@@ -212,6 +204,17 @@ func (l *Logger) formatMessage(level LogLevel, msg string) string {
 		return msg
 	}
 
+	// For plain format, no prefix but still apply color
+	if l.format == LogFormatPlain {
+		if l.withTime {
+			formatted = timeStr[1:] + " " + msg // Remove leading space from timeStr
+		} else {
+			formatted = msg
+		}
+		return l.colorizeByLevel(level, formatted)
+	}
+
+	// Build formatted message with prefix
 	if prefix != "" {
 		formatted = prefix + timeStr + " " + msg
 	} else {
