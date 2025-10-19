@@ -5,7 +5,7 @@
 - [Parsing & Context](./parsing-and-context.md)
 - [Configuration](./configuration.md)
 - [Middleware](./middleware.md)
-- [IO & Color](./io-and-color.md)
+- [IO, Color & Logging](./io-and-color.md)
 - [Wrapper DSL](./wrapper.md)
 - [Errors & Exit Codes](./errors-and-exit-codes.md)
 - [Best Practices](./best-practices.md)

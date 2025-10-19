@@ -12,6 +12,7 @@ type platformIO interface {
 	termSize(*os.File) (width, height int, ok bool)
 	enableVirtualTerminal() bool
 	vtEnabled() bool
+	colorCapabilityLevel() int // Returns detected color level: 0=none, 1=16, 2=256, 3=truecolor
 }
 
 // newPlatformIO is provided by platform files
@@ -22,8 +23,10 @@ type IOManager struct {
 	out stdio.Writer
 	err stdio.Writer
 
-	forceColor bool
-	noColor    bool
+	forceColor         bool
+	noColor            bool
+	forceColorLevel    int
+	hasForceColorLevel bool
 
 	p platformIO
 }
@@ -51,6 +54,14 @@ func (m *IOManager) NoColor() *IOManager { m.noColor = true; m.forceColor = fals
 
 // ColorAuto uses environment heuristics to determine color support.
 func (m *IOManager) ColorAuto() *IOManager { m.noColor = false; m.forceColor = false; return m }
+
+// ForceColorLevel forces a specific color level (0=none, 1=16, 2=256, 3=truecolor).
+// This is useful when automatic detection fails to recognize terminal capabilities.
+func (m *IOManager) ForceColorLevel(level int) *IOManager {
+	m.forceColorLevel = level
+	m.hasForceColorLevel = true
+	return m
+}
 
 // In returns the configured input reader.
 func (m *IOManager) In() stdio.Reader { return m.in }
@@ -106,18 +117,61 @@ func (m *IOManager) SupportsColor() bool {
 
 // ColorLevel returns 0 for none, 1 for basic, 2 for 256 colors, and 3 for truecolor.
 func (m *IOManager) ColorLevel() int {
+	// Check for forced color level first
+	if m.hasForceColorLevel {
+		return m.forceColorLevel
+	}
 	if !m.SupportsColor() {
 		return 0
 	}
-	if os.Getenv("COLORTERM") == "truecolor" {
+	// Check for explicit truecolor/24bit environment variable
+	colorterm := os.Getenv("COLORTERM")
+	if colorterm == "truecolor" || colorterm == "24bit" {
 		return 3
 	}
-	if contains(os.Getenv("TERM"), "256color") {
+	// Check TERM for truecolor indicators
+	term := os.Getenv("TERM")
+	if contains(term, "truecolor") || contains(term, "24bit") {
+		return 3
+	}
+	// Check for modern terminal programs that support truecolor
+	termProgram := os.Getenv("TERM_PROGRAM")
+	if termProgram == "vscode" || termProgram == "zed" {
+		return 3
+	}
+
+	// Windows-specific detection
+	if goos() == "windows" {
+		// Check for known truecolor-capable Windows terminals
+		// Windows Terminal sets WT_SESSION or WT_PROFILE_ID
+		if os.Getenv("WT_SESSION") != "" || os.Getenv("WT_PROFILE_ID") != "" {
+			return 3
+		}
+		// ConEmu sets ConEmuANSI=ON for truecolor support
+		if os.Getenv("ConEmuANSI") == "ON" {
+			return 3
+		}
+		// If VT processing is enabled, assume truecolor support
+		if m.p.vtEnabled() {
+			return 3
+		}
+		// Fallback for Windows without detection
+		if m.IsTTY() {
+			return 2 // At least 256 colors on modern Windows
+		}
+	}
+	// 256-color terminals
+	if contains(term, "256color") {
 		return 2
 	}
-	if goos() == "windows" && m.p.vtEnabled() {
-		return 2
+
+	// Platform-specific terminal capability detection (queries actual terminal)
+	// This is more reliable than environment variables alone
+	if level := m.p.colorCapabilityLevel(); level > 0 {
+		return level
 	}
+
+	// Basic 16-color fallback
 	return 1
 }
 

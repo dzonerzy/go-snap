@@ -4,11 +4,18 @@ package snapio
 
 import (
 	"os"
+	"os/exec"
+	"strconv"
+	"strings"
+	"sync"
 	"syscall"
 	"unsafe"
 )
 
-type unixPlatform struct{}
+type unixPlatform struct {
+	colorCapOnce sync.Once
+	colorCap     int // Cached result: -1=unknown, 0=none, 8=basic, 256=256color, 16777216=truecolor
+}
 
 func newPlatformIO() platformIO { return &unixPlatform{} }
 
@@ -48,3 +55,54 @@ func (u *unixPlatform) termSize(f *os.File) (int, int, bool) {
 
 func (u *unixPlatform) enableVirtualTerminal() bool { return true }
 func (u *unixPlatform) vtEnabled() bool             { return true }
+
+// detectColorCapability queries the terminal for its actual color capability
+func (u *unixPlatform) detectColorCapability() int {
+	u.colorCapOnce.Do(func() {
+		u.colorCap = -1 // Unknown by default
+
+		// First check tput RGB - most reliable for truecolor detection
+		cmd := exec.Command("tput", "RGB")
+		if err := cmd.Run(); err == nil {
+			// If RGB capability exists, we have truecolor
+			u.colorCap = 16777216 // 2^24
+			return
+		}
+
+		// Try tput colors command to get the number of colors supported
+		cmd = exec.Command("tput", "colors")
+		cmd.Env = os.Environ()
+		output, err := cmd.Output()
+		if err == nil {
+			colors := strings.TrimSpace(string(output))
+			if n, parseErr := strconv.Atoi(colors); parseErr == nil {
+				u.colorCap = n
+				return
+			}
+		}
+
+		// Last resort: parse TERM for hints
+		term := os.Getenv("TERM")
+		if strings.Contains(term, "256") {
+			u.colorCap = 256
+		} else if term != "" && term != "dumb" {
+			u.colorCap = 8 // Basic colors
+		}
+	})
+	return u.colorCap
+}
+
+// colorCapabilityLevel returns the color level based on detected capability
+func (u *unixPlatform) colorCapabilityLevel() int {
+	capability := u.detectColorCapability()
+	if capability >= 16777216 {
+		return 3 // Truecolor
+	}
+	if capability >= 256 {
+		return 2 // 256 colors
+	}
+	if capability >= 8 {
+		return 1 // Basic 16 colors
+	}
+	return 0 // No color
+}
