@@ -434,3 +434,30 @@ func (c *Context) AppDescription() string {
 func (c *Context) AppAuthors() []Author {
 	return c.App.authors
 }
+
+// Logging methods - convenient access to structured logging
+
+// LogDebug logs a debug message (purple circle by default)
+func (c *Context) LogDebug(format string, args ...any) {
+	c.App.Logger().Debug(format, args...)
+}
+
+// LogInfo logs an informational message (blue circle by default)
+func (c *Context) LogInfo(format string, args ...any) {
+	c.App.Logger().Info(format, args...)
+}
+
+// LogSuccess logs a success message (green circle by default)
+func (c *Context) LogSuccess(format string, args ...any) {
+	c.App.Logger().Success(format, args...)
+}
+
+// LogWarning logs a warning message (yellow circle by default)
+func (c *Context) LogWarning(format string, args ...any) {
+	c.App.Logger().Warning(format, args...)
+}
+
+// LogError logs an error message (red circle by default)
+func (c *Context) LogError(format string, args ...any) {
+	c.App.Logger().Error(format, args...)
+}

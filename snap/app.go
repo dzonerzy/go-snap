@@ -68,6 +68,9 @@ type App struct {
 	// IO management
 	ioManager *snapio.IOManager
 
+	// Logger for structured logging
+	logger *snapio.Logger
+
 	// Exit code management
 	exitCodes *ExitCodeManager
 
@@ -159,6 +162,14 @@ func (a *App) IO() *snapio.IOManager {
 		a.ioManager = snapio.New()
 	}
 	return a.ioManager
+}
+
+// Logger returns the logger instance, initializing it if necessary
+func (a *App) Logger() *snapio.Logger {
+	if a.logger == nil {
+		a.logger = snapio.NewLogger(a.IO())
+	}
+	return a.logger
 }
 
 // Flag builders - Type-safe flag definitions
@@ -754,25 +765,52 @@ func (a *App) showHelp() error {
 	if len(a.args) > 0 {
 		a.println()
 		a.println("Arguments:")
+
+		// Calculate max argument name width for alignment
+		maxArgWidth := 0
+		for _, arg := range a.args {
+			width := 2 // "  " prefix
+			if arg.Required {
+				width += 2 + len(arg.Name) // "<name>"
+			} else {
+				width += 2 + len(arg.Name) // "[name]"
+			}
+			if arg.Variadic {
+				width += 3 // "..."
+			}
+			if width > maxArgWidth {
+				maxArgWidth = width
+			}
+		}
+
 		for _, arg := range a.args {
 			a.print("  ")
+			currentWidth := 2
 			if arg.Required {
 				a.print("<", arg.Name, ">")
+				currentWidth += 2 + len(arg.Name)
 			} else {
 				a.print("[", arg.Name, "]")
+				currentWidth += 2 + len(arg.Name)
 			}
 			if arg.Variadic {
 				a.print("...")
+				currentWidth += 3
 			}
 			if arg.Description != "" {
-				a.print("\t", arg.Description)
+				// Add padding to align descriptions (spaces only, no tabs)
+				padding := maxArgWidth - currentWidth + 2 // +2 for minimum spacing
+				for range padding {
+					a.print(" ")
+				}
+				a.print(arg.Description)
 			}
 			a.println()
 		}
 	} else if a.hasRestArgs {
 		a.println()
 		a.println("Arguments:")
-		a.println("  [args...]\tAll remaining arguments are passed through")
+		a.println("  [args...]  All remaining arguments are passed through")
 	}
 
 	// Commands (deterministic order)
@@ -805,12 +843,12 @@ func (a *App) showHelp() error {
 			cmd := a.commands[name]
 			a.print("  ", name)
 			if cmd.Description() != "" {
-				// Add padding to align descriptions
-				padding := maxNameLen - len(name)
+				// Add padding to align descriptions (spaces only, no tabs)
+				padding := maxNameLen - len(name) + 2 // +2 for minimum spacing
 				for range padding {
 					a.print(" ")
 				}
-				a.print("\t", cmd.Description())
+				a.print(cmd.Description())
 			}
 			if len(cmd.Aliases) > 0 {
 				a.print(" (aliases: ")
@@ -835,7 +873,7 @@ func (a *App) showHelp() error {
 
 // flagDisplayWidth calculates the width of the flag display string (before description)
 func flagDisplayWidth(flag *Flag) int {
-	width := 2 + len(flag.Name) // "  --" + name
+	width := 4 + len(flag.Name) // "  --" + name (2 spaces + 2 dashes = 4)
 	if flag.Short != 0 {
 		width += 4 // ", -X"
 	}
@@ -964,16 +1002,16 @@ func (a *App) showFlag(flag *Flag, maxWidth int) {
 		a.print(" value")
 	}
 
-	// Add padding to align descriptions
+	// Add padding to align descriptions (spaces only, no tabs)
 	currentWidth := flagDisplayWidth(flag)
-	padding := maxWidth - currentWidth
+	padding := maxWidth - currentWidth + 2 // +2 for minimum spacing
 	for range padding {
 		a.print(" ")
 	}
 
 	// Show description
 	if flag.Description != "" {
-		a.print("\t", flag.Description)
+		a.print(flag.Description)
 	}
 
 	// Show default value if present
@@ -1112,25 +1150,52 @@ func (a *App) showCommandHelp(cmd *Command) error {
 	if len(cmd.args) > 0 {
 		a.println()
 		a.println("Arguments:")
+
+		// Calculate max argument name width for alignment
+		maxArgWidth := 0
+		for _, arg := range cmd.args {
+			width := 2 // "  " prefix
+			if arg.Required {
+				width += 2 + len(arg.Name) // "<name>"
+			} else {
+				width += 2 + len(arg.Name) // "[name]"
+			}
+			if arg.Variadic {
+				width += 3 // "..."
+			}
+			if width > maxArgWidth {
+				maxArgWidth = width
+			}
+		}
+
 		for _, arg := range cmd.args {
 			a.print("  ")
+			currentWidth := 2
 			if arg.Required {
 				a.print("<", arg.Name, ">")
+				currentWidth += 2 + len(arg.Name)
 			} else {
 				a.print("[", arg.Name, "]")
+				currentWidth += 2 + len(arg.Name)
 			}
 			if arg.Variadic {
 				a.print("...")
+				currentWidth += 3
 			}
 			if arg.Description != "" {
-				a.print("\t", arg.Description)
+				// Add padding to align descriptions (spaces only, no tabs)
+				padding := maxArgWidth - currentWidth + 2 // +2 for minimum spacing
+				for range padding {
+					a.print(" ")
+				}
+				a.print(arg.Description)
 			}
 			a.println()
 		}
 	} else if cmd.hasRestArgs {
 		a.println()
 		a.println("Arguments:")
-		a.println("  [args...]\tAll remaining arguments are passed through")
+		a.println("  [args...]  All remaining arguments are passed through")
 	}
 
 	// Subcommands (sorted)
@@ -1150,11 +1215,25 @@ func (a *App) showCommandHelp(cmd *Command) error {
 				}
 			}
 		}
+
+		// Calculate max subcommand name length for alignment
+		maxNameLen := 0
+		for _, name := range names {
+			if len(name) > maxNameLen {
+				maxNameLen = len(name)
+			}
+		}
+
 		for _, name := range names {
 			subcmd := cmd.subcommands[name]
 			a.print("  ", name)
 			if subcmd.Description() != "" {
-				a.print("\t", subcmd.Description())
+				// Add padding to align descriptions (spaces only, no tabs)
+				padding := maxNameLen - len(name) + 2 // +2 for minimum spacing
+				for range padding {
+					a.print(" ")
+				}
+				a.print(subcmd.Description())
 			}
 			if len(subcmd.Aliases) > 0 {
 				a.print(" (aliases: ")
