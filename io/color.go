@@ -22,7 +22,7 @@ var (
 	Cyan    = basic(6)
 	White   = basic(7)
 
-	BrightBlack   = basic(8)
+	BrightBlack   = basic(8) // Gray
 	BrightRed     = basic(9)
 	BrightGreen   = basic(10)
 	BrightYellow  = basic(11)
@@ -30,6 +30,92 @@ var (
 	BrightMagenta = basic(13)
 	BrightCyan    = basic(14)
 	BrightWhite   = basic(15)
+)
+
+// 256-color palette - Extended colors
+var (
+	// Grays (232-255 are grayscale)
+	Gray1 = Indexed(232) // Darkest gray
+	Gray2 = Indexed(236)
+	Gray3 = Indexed(240)
+	Gray4 = Indexed(244)
+	Gray5 = Indexed(248)
+	Gray6 = Indexed(252) // Lightest gray
+
+	// Reds
+	DarkRed      = Indexed(88)
+	Orange       = Indexed(208)
+	BrightOrange = Indexed(214)
+
+	// Greens
+	DarkGreen = Indexed(22)
+	LimeGreen = Indexed(118)
+
+	// Blues
+	DarkBlue = Indexed(18)
+	SkyBlue  = Indexed(117)
+
+	// Purples/Magentas
+	Purple       = Indexed(93)
+	LightPurple  = Indexed(141)
+	BrightPurple = Indexed(165)
+	Violet       = Indexed(99)
+
+	// Cyans
+	DarkCyan = Indexed(30)
+	Aqua     = Indexed(51)
+
+	// Yellows/Golds
+	Gold       = Indexed(220)
+	DarkYellow = Indexed(136)
+)
+
+// Truecolor palette - RGB colors with normal/bright variants
+var (
+	// Blacks and Grays
+	TrueBlack       = Truecolor(0, 0, 0)
+	TrueDarkGray    = Truecolor(85, 85, 85)
+	TrueGray        = Truecolor(128, 128, 128)
+	TrueLightGray   = Truecolor(192, 192, 192)
+	TrueBrightWhite = Truecolor(255, 255, 255)
+
+	// Reds
+	TrueRed       = Truecolor(205, 49, 49) // Normal red
+	TrueBrightRed = Truecolor(255, 85, 85) // Bright red
+	TrueDarkRed   = Truecolor(139, 0, 0)   // Dark red
+	TrueOrange    = Truecolor(255, 135, 0) // Orange
+
+	// Greens
+	TrueGreen       = Truecolor(19, 161, 14)  // Normal green
+	TrueBrightGreen = Truecolor(80, 250, 123) // Bright green
+	TrueDarkGreen   = Truecolor(0, 100, 0)    // Dark green
+	TrueLimeGreen   = Truecolor(50, 205, 50)  // Lime green
+
+	// Yellows
+	TrueYellow       = Truecolor(229, 229, 16)  // Normal yellow
+	TrueBrightYellow = Truecolor(255, 184, 108) // Bright yellow/orange
+	TrueDarkYellow   = Truecolor(184, 134, 11)  // Dark yellow/gold
+	TrueGold         = Truecolor(255, 215, 0)   // Gold
+
+	// Blues
+	TrueBlue       = Truecolor(59, 120, 255)  // Normal blue
+	TrueBrightBlue = Truecolor(92, 148, 252)  // Bright blue
+	TrueDarkBlue   = Truecolor(0, 0, 139)     // Dark blue
+	TrueSkyBlue    = Truecolor(135, 206, 235) // Sky blue
+
+	// Magentas/Purples
+	TrueMagenta       = Truecolor(180, 0, 158)   // Normal magenta
+	TrueBrightMagenta = Truecolor(255, 0, 255)   // Bright magenta
+	TruePurple        = Truecolor(128, 0, 128)   // Purple
+	TrueLightPurple   = Truecolor(189, 147, 249) // Light purple/lavender
+	TrueBrightPurple  = Truecolor(221, 160, 221) // Bright purple/plum
+	TrueViolet        = Truecolor(138, 43, 226)  // Violet
+
+	// Cyans
+	TrueCyan       = Truecolor(41, 184, 219)  // Normal cyan
+	TrueBrightCyan = Truecolor(139, 233, 253) // Bright cyan
+	TrueDarkCyan   = Truecolor(0, 139, 139)   // Dark cyan
+	TrueAqua       = Truecolor(0, 255, 255)   // Aqua
 )
 
 func basic(i int) ColorSpec { return ColorSpec{kind: 1, index: i} }
@@ -173,16 +259,69 @@ func itoa(n int) string {
 
 // Theme provides semantic colors
 type Theme struct {
-	Primary, Success, Warning, Error, Info, Muted ColorSpec
+	Primary, Success, Warning, Error, Info, Debug, Muted ColorSpec
 }
 
-func DefaultTheme() Theme {
+// DefaultTheme16 returns a theme using basic 16 colors (ANSI colors 0-15).
+// Best for terminals with limited color support or ColorLevel 1.
+func DefaultTheme16() Theme {
 	return Theme{
 		Primary: BrightBlue,
 		Success: BrightGreen,
 		Warning: BrightYellow,
 		Error:   BrightRed,
 		Info:    BrightCyan,
+		Debug:   BrightMagenta, // Best we can do with 16 colors
+		Muted:   BrightBlack,   // Gray
+	}
+}
+
+// DefaultTheme256 returns a theme using 256-color palette.
+// Best for terminals with ColorLevel 2 (256 colors).
+func DefaultTheme256() Theme {
+	return Theme{
+		Primary: BrightBlue,
+		Success: BrightGreen,
+		Warning: BrightYellow,
+		Error:   BrightRed,
+		Info:    BrightCyan,
+		Debug:   LightPurple, // Indexed(141) - proper light purple
 		Muted:   BrightBlack,
 	}
+}
+
+// DefaultThemeTruecolor returns a theme using 24-bit RGB colors.
+// Best for terminals with ColorLevel 3 (truecolor/16M colors).
+func DefaultThemeTruecolor() Theme {
+	return Theme{
+		Primary: TrueBrightBlue,   // RGB(92, 148, 252)
+		Success: TrueBrightGreen,  // RGB(80, 250, 123)
+		Warning: TrueBrightYellow, // RGB(255, 184, 108)
+		Error:   TrueBrightRed,    // RGB(255, 85, 85)
+		Info:    TrueBrightCyan,   // RGB(139, 233, 253)
+		Debug:   TrueLightPurple,  // RGB(189, 147, 249)
+		Muted:   TrueGray,         // RGB(128, 128, 128)
+	}
+}
+
+// DefaultTheme returns the appropriate default theme based on IOManager's color level.
+// Automatically selects DefaultTheme16, DefaultTheme256, or DefaultThemeTruecolor.
+func DefaultTheme(io *IOManager) Theme {
+	switch io.ColorLevel() {
+	case 3:
+		return DefaultThemeTruecolor()
+	case 2:
+		return DefaultTheme256()
+	case 1:
+		return DefaultTheme16()
+	default:
+		// No color support, but return basic theme anyway (colors won't be rendered)
+		return DefaultTheme16()
+	}
+}
+
+// TruecolorTheme is an alias for DefaultThemeTruecolor for backward compatibility.
+// Deprecated: Use DefaultThemeTruecolor() or DefaultTheme(io) instead.
+func TruecolorTheme() Theme {
+	return DefaultThemeTruecolor()
 }
