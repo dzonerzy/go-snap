@@ -105,3 +105,27 @@ func (w *windowsPlatform) vtEnabled() bool {
 	}
 	return mode&enableVirtualTerminalProcessing != 0
 }
+
+// colorCapabilityLevel returns the color level for Windows terminals
+// Modern Windows terminals with VT support can handle truecolor
+func (w *windowsPlatform) colorCapabilityLevel() int {
+	// Check for known truecolor-capable Windows terminals via environment
+	if os.Getenv("WT_SESSION") != "" || os.Getenv("WT_PROFILE_ID") != "" {
+		return 3 // Windows Terminal
+	}
+	if os.Getenv("ConEmuANSI") == "ON" {
+		return 3 // ConEmu with ANSI support
+	}
+
+	// If VT processing is enabled, assume truecolor capability
+	if w.vtEnabled() {
+		return 3
+	}
+
+	// Fallback: if it's a console, assume at least 256 colors on modern Windows
+	if w.isTerminal(os.Stdout) {
+		return 2
+	}
+
+	return 0 // No color support detected
+}
