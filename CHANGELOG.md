@@ -1,5 +1,63 @@
 # Changelog
 
+## [0.2.1] - 2025-01-19
+
+### Added
+- **Structured logging system** with semantic log levels and customizable formatting
+  * Context methods: `ctx.LogDebug()`, `ctx.LogInfo()`, `ctx.LogSuccess()`, `ctx.LogWarning()`, `ctx.LogError()`
+  * Default format: Colored circle emoji (🟣 debug, 🔵 info, 🟢 success, 🟡 warning, 🔴 error)
+  * Built-in formats: `LogFormatCircles` (default), `LogFormatSymbols` (● ◆ ✓ ▲ ✗), `LogFormatTagged` ([INFO] [WARN]), `LogFormatPlain`
+  * Custom templates with `WithTemplate()` supporting `{{.Level}}`, `{{.Time}}`, `{{.Message}}`, `{{.Prefix}}`
+  * Per-level prefix customization with `SetPrefix(level, prefix)`
+  * Optional timestamps with `WithTimestamp(true)` and custom time formats
+  * Automatic color coding: light purple (debug), cyan (info), green (success), yellow (warning), red (error)
+  * **Smart theme selection**: automatically selects optimal theme based on terminal color capability
+    - ColorLevel 1 (16 colors): `DefaultTheme16()` with BrightMagenta for debug
+    - ColorLevel 2 (256 colors): `DefaultTheme256()` with Indexed(141) light purple for debug
+    - ColorLevel 3 (truecolor): `DefaultThemeTruecolor()` with RGB(189, 147, 249) light purple for debug
+  * Smart output routing: errors/warnings to stderr, info/success/debug to stdout
+  * Full integration with existing `IOManager` and `Theme` system
+  * Theme functions: `DefaultTheme(io)`, `DefaultTheme16()`, `DefaultTheme256()`, `DefaultThemeTruecolor()`
+  * New example: `examples/logging-demo` demonstrating all formats and customization options
+  * Color test utility: `examples/logging-demo/color-test.go` to preview color options
+  * App-level access via `app.Logger()` for advanced configuration
+
+- README.md documentation for previously undocumented examples:
+  * `examples/version-command` - Custom version commands with Context metadata accessors
+  * `examples/raw-args-demo` - RawArgs() usage for audit logging and debugging
+  * `examples/smart_errors` - Smart error handling with fuzzy matching suggestions
+  * `examples/lifecycle-hooks` - Before/After and BeforeExec/AfterExec hooks
+  * `examples/demo` - Comprehensive help system demonstration
+
+### Added
+- `IOManager.ForceColorLevel(level)` method to manually override color level detection (0=none, 1=16, 2=256, 3=truecolor)
+- **Platform-specific color capability detection** via terminfo queries (`tput colors`, `tput RGB`) on Unix/Linux/WSL for accurate terminal capability detection beyond environment variables
+- **Comprehensive color palette** with normal/bright variants across all color modes:
+  * 16-color: `Black`, `Red`, `Green`, etc. with `Bright*` variants
+  * 256-color: Extended palette including `LightPurple`, `Orange`, `SkyBlue`, `Gray1-6`, etc.
+  * Truecolor: RGB colors with `True*` prefix including `TrueLightPurple`, `TrueBrightRed`, `TrueSkyBlue`, etc.
+
+### Changed
+- **Logger symbol format**: Replaced emoji with pure Unicode symbols in `LogFormatSymbols` for consistency
+  * Info: Changed from ℹ️ (emoji) to ◆ (diamond symbol)
+  * Warning: Changed from ⚠️ (emoji) to ▲ (triangle symbol)
+  * All symbols are now geometric Unicode characters (●◆✓▲✗) with no emoji
+
+### Fixed
+- **Logger prefix skipping**: Prefixes (emoji/symbols/tags) are now skipped for empty or whitespace-only messages, allowing clean visual spacing in logs
+- **Truecolor detection on Windows**: `ColorLevel()` now correctly returns 3 (truecolor) on Windows terminals with VT support enabled, instead of limiting to 2 (256 colors). Modern Windows terminals (Windows Terminal, VS Code, PowerShell) now automatically use TruecolorTheme
+- **Enhanced truecolor detection**: Added support for `COLORTERM=24bit` and `TERM` variants containing "truecolor" or "24bit"
+- **IDE terminal detection**: Added support for Zed and VS Code terminals via `TERM_PROGRAM` environment variable (cross-platform)
+- **Unix/WSL terminal detection**: Added `tput` queries to detect actual terminal color capability, improving accuracy over environment variables alone
+- **Help output alignment** now uses spaces-only instead of tabs for consistent formatting across all terminals
+  * Fixed `flagDisplayWidth()` calculation bug (was using 2 instead of 4 for "  --" prefix)
+  * Flag descriptions now properly aligned at both app-level and command-level
+  * Subcommand descriptions now properly aligned with consistent spacing
+  * Positional argument descriptions now properly aligned
+  * All help sections (flags, commands, subcommands, arguments) use uniform space-based alignment
+  * Minimum 2-space separation ensures visual clarity even for longest names
+  * Eliminates tab stop issues that caused inconsistent spacing in different terminal environments
+
 ## [0.2.0] - 2025-10-16
 
 ### Added
