@@ -38,10 +38,9 @@ func main() {
 		Action(dockerRunAction)
 
 	if err := app.Run(); err != nil {
-		if err != snap.ErrHelpShown && err != snap.ErrVersionShown {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
+		// Help and version return nil now, so any error here is a real error
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
 	}
 }
 
