@@ -20,7 +20,7 @@ func main() {
 	app.ErrorHandler().
 		SuggestCommands(true).
 		SuggestFlags(true).
-		ShowHelpOnError(true)
+		ShowHelpOnError(true).MaxDistance(2)
 
 	// greet command: prints a greeting N times
 	app.Command("greet", "Print a friendly greeting").
