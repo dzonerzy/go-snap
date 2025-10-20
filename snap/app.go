@@ -368,7 +368,7 @@ func (a *App) RunContext(ctx context.Context) error {
 
 // RunWithArgs runs the application with provided arguments
 //
-//nolint:gocognit,nestif,funlen // Main execution flow is inherently complex
+//nolint:gocognit,nestif,funlen,cyclop // Main execution flow is inherently complex
 func (a *App) RunWithArgs(ctx context.Context, args []string) error {
 	// Store raw arguments before parsing for later access via Context.RawArgs()
 	a.rawArgs = args
