@@ -182,7 +182,7 @@ func (eh *ErrorHandler) addFlagSuggestions(err *CLIError, app *App) {
 	if flagName, ok := err.Context["flag"].(string); ok {
 		// Get command context if available
 		var currentCmd *Command
-		if cmd, ok := err.Context["current_command"].(*Command); ok {
+		if cmd, okCmd := err.Context["current_command"].(*Command); okCmd {
 			currentCmd = cmd
 		}
 
