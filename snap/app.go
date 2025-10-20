@@ -630,7 +630,7 @@ func (a *App) handleParseError(parseErr *ParseError) error {
 
 	// Process error with smart suggestions and format the error message
 	cliErr = a.errorHandler.ProcessError(cliErr, a)
-	cliErr = a.errorHandler.FormatError(cliErr, a)
+	cliErr = a.errorHandler.formatError(cliErr, a)
 
 	// If ShowHelpOnError is enabled, print contextual help to stderr before returning the error
 	if a.errorHandler.showHelpOnError {
