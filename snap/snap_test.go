@@ -603,22 +603,22 @@ func TestErrorDisplay_GroupViolation_ShowsGroupHelp(t *testing.T) {
 	g.EndGroup()
 	// Parse with both flags -> violation
 	p := NewParser(app)
-	out := captureStderr(func() {
-		_, err := p.Parse([]string{"--json", "--yaml"})
-		if err != nil {
-			// send through app's handler to display group context
-			pe := &ParseError{}
-			if errors.As(err, &pe) {
-				_ = app.handleParseError(pe)
-			} else {
-				t.Fatalf("unexpected error type: %T", err)
+	_, err := p.Parse([]string{"--json", "--yaml"})
+	if err != nil {
+		// send through app's handler to display group context
+		pe := &ParseError{}
+		if errors.As(err, &pe) {
+			cliErr := app.handleParseError(pe)
+			// Check that the formatted error contains flag group help
+			errMsg := cliErr.Error()
+			if !strings.Contains(errMsg, "Flag group 'output'") || !strings.Contains(errMsg, "Constraint:") {
+				t.Fatalf("expected group help in error message, got: %s", errMsg)
 			}
 		} else {
-			t.Fatalf("expected error")
+			t.Fatalf("unexpected error type: %T", err)
 		}
-	})
-	if !strings.Contains(out, "Flag group 'output'") || !strings.Contains(out, "Constraint:") {
-		t.Fatalf("expected group help in stderr, got: %s", out)
+	} else {
+		t.Fatalf("expected error")
 	}
 }
 
