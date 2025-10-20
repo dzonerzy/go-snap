@@ -27,12 +27,13 @@ const (
 
 // ParseError represents parsing-specific errors (used by parser.go)
 type ParseError struct {
-	Type       ErrorType
-	Message    string
-	Flag       string
-	Command    string
-	GroupName  string // For flag group errors - enables contextual help
-	Suggestion string
+	Type           ErrorType
+	Message        string
+	Flag           string
+	Command        string
+	GroupName      string // For flag group errors - enables contextual help
+	Suggestion     string
+	CurrentCommand *Command // The command context where error occurred (for flag suggestions)
 }
 
 func (e *ParseError) Error() string {
@@ -179,8 +180,14 @@ func (eh *ErrorHandler) ProcessError(err *CLIError, app *App) *CLIError {
 // addFlagSuggestions adds fuzzy-matched flag suggestions using internal/fuzzy.
 func (eh *ErrorHandler) addFlagSuggestions(err *CLIError, app *App) {
 	if flagName, ok := err.Context["flag"].(string); ok {
+		// Get command context if available
+		var currentCmd *Command
+		if cmd, ok := err.Context["current_command"].(*Command); ok {
+			currentCmd = cmd
+		}
+
 		// Find similar flag names using fuzzy matching
-		bestMatch := eh.findBestFlagMatch(flagName, app)
+		bestMatch := eh.findBestFlagMatch(flagName, app, currentCmd)
 		if bestMatch != "" {
 			_ = err.WithSuggestion(fmt.Sprintf("Did you mean '--%s'?", bestMatch))
 		}
@@ -212,19 +219,37 @@ func (eh *ErrorHandler) addGroupContext(err *CLIError, app *App) {
 }
 
 // Efficient fuzzy matching using internal/fuzzy package
-func (eh *ErrorHandler) findBestFlagMatch(input string, app *App) string {
+func (eh *ErrorHandler) findBestFlagMatch(input string, app *App, currentCmd *Command) string {
+	// Collect app-level flags
 	flagNames := make([]string, 0, len(app.flags))
 	for flagName := range app.flags {
 		flagNames = append(flagNames, flagName)
 	}
+
+	// If we're in a command context, also include command-level flags
+	if currentCmd != nil {
+		for flagName := range currentCmd.flags {
+			flagNames = append(flagNames, flagName)
+		}
+	}
+
 	return fuzzy.FindBestFlag(input, flagNames, eh.maxDistance)
 }
 
 func (eh *ErrorHandler) findBestCommandMatch(input string, app *App) string {
+	// Collect app-level commands
 	cmdNames := make([]string, 0, len(app.commands))
 	for cmdName := range app.commands {
 		cmdNames = append(cmdNames, cmdName)
 	}
+
+	// If we're in a command context, also include subcommands
+	if app.currentResult != nil && app.currentResult.Command != nil {
+		for cmdName := range app.currentResult.Command.subcommands {
+			cmdNames = append(cmdNames, cmdName)
+		}
+	}
+
 	return fuzzy.FindBestCommand(input, cmdNames, eh.maxDistance)
 }
 

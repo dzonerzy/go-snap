@@ -627,6 +627,7 @@ func (p *Parser) createUnknownFlagError(name string) error {
 	p.reusableError.Message = string(append([]byte(nil), p.valueBuffer...))
 	p.reusableError.Flag = name
 	p.reusableError.Suggestion = suggestion
+	p.reusableError.CurrentCommand = p.currentCmd
 	return p.reusableError
 }
 
@@ -646,6 +647,7 @@ func (p *Parser) createUnknownCommandError(name string) error {
 	p.reusableError.Message = string(append([]byte(nil), p.valueBuffer...))
 	p.reusableError.Command = name
 	p.reusableError.Suggestion = suggestion
+	p.reusableError.CurrentCommand = p.currentCmd
 	return p.reusableError
 }
 

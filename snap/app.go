@@ -614,9 +614,17 @@ func (a *App) handleParseError(parseErr *ParseError) error {
 		if parseErr.Flag != "" {
 			cliErr = cliErr.WithContext("flag", parseErr.Flag)
 		}
+		// Add command context for flag suggestions
+		if parseErr.CurrentCommand != nil {
+			cliErr = cliErr.WithContext("current_command", parseErr.CurrentCommand)
+		}
 	case ErrorTypeUnknownCommand:
 		if parseErr.Command != "" {
 			cliErr = cliErr.WithContext("command", parseErr.Command)
+		}
+		// Add command context for subcommand suggestions
+		if parseErr.CurrentCommand != nil {
+			cliErr = cliErr.WithContext("current_command", parseErr.CurrentCommand)
 		}
 	case ErrorTypeFlagGroupViolation:
 		if parseErr.GroupName != "" {
