@@ -617,15 +617,10 @@ func (p *Parser) createUnknownFlagError(name string) error {
 	suggestion := p.findClosestFlag(name)
 
 	// Pre-allocate error message to avoid allocations
+	// Note: Don't embed suggestion in message - error handler will add it
 	p.resetStringBuilder()
 	p.appendString("unknown flag: --")
 	p.appendString(name)
-
-	if suggestion != "" {
-		p.appendString(". Did you mean --")
-		p.appendString(suggestion)
-		p.appendString("?")
-	}
 
 	// Reuse pre-allocated error to avoid allocations, but copy string to avoid aliasing
 	p.reusableError.Type = ErrorTypeUnknownFlag
@@ -641,15 +636,10 @@ func (p *Parser) createUnknownCommandError(name string) error {
 	suggestion := p.findClosestCommand(name)
 
 	// Pre-allocate error message to avoid allocations
+	// Note: Don't embed suggestion in message - error handler will add it
 	p.resetStringBuilder()
 	p.appendString("unknown command: ")
 	p.appendString(name)
-
-	if suggestion != "" {
-		p.appendString(". Did you mean '")
-		p.appendString(suggestion)
-		p.appendString("'?")
-	}
 
 	// Reuse pre-allocated error to avoid allocations, but copy string to avoid aliasing
 	p.reusableError.Type = ErrorTypeUnknownCommand
