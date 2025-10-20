@@ -631,16 +631,16 @@ func TestHelpAndVersionAcrossContexts(t *testing.T) {
 	app.IO().WithOut(&buf).WithErr(&buf)
 
 	sub := app.Command("serve", "serves").Build()
-	// top-level --help
-	if err := app.RunWithArgs(context.Background(), []string{"--help"}); !errors.Is(err, ErrHelpShown) {
-		t.Fatalf("expected ErrHelpShown, got %v", err)
+	// top-level --help - should return nil (success, not an error)
+	if err := app.RunWithArgs(context.Background(), []string{"--help"}); err != nil {
+		t.Fatalf("expected nil for help, got %v", err)
 	}
-	// subcommand --help
+	// subcommand --help - should return nil (success, not an error)
 	p := NewParser(app)
 	res, _ := p.Parse([]string{"serve", "--help"})
 	app.currentResult = res
-	if err := app.RunWithArgs(context.Background(), []string{"serve", "--help"}); !errors.Is(err, ErrHelpShown) {
-		t.Fatalf("expected ErrHelpShown for subcommand, got %v", err)
+	if err := app.RunWithArgs(context.Background(), []string{"serve", "--help"}); err != nil {
+		t.Fatalf("expected nil for subcommand help, got %v", err)
 	}
 	_ = sub // silence
 }
