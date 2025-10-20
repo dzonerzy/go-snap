@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -568,31 +567,6 @@ func TestExitCodes_Minimal(t *testing.T) {
 	}
 }
 
-// captureStderr captures stderr output during fn
-func captureStderr(fn func()) string {
-	old := os.Stderr
-	r, w, _ := os.Pipe()
-	//nolint:reassign // intentionally redirect os.Stderr in tests to capture output
-	os.Stderr = w
-	fn()
-	w.Close()
-	//nolint:reassign // intentionally redirect os.Stderr in tests to capture output
-	os.Stderr = old
-	var sb strings.Builder
-	buf := make([]byte, 4096)
-	for {
-		n, _ := r.Read(buf)
-		if n <= 0 {
-			break
-		}
-		sb.Write(buf[:n])
-		if n < len(buf) {
-			break
-		}
-	}
-	return sb.String()
-}
-
 // Error display should include group help context for flag group violations
 func TestErrorDisplay_GroupViolation_ShowsGroupHelp(t *testing.T) {
 	app := New("x", "")
@@ -604,6 +578,7 @@ func TestErrorDisplay_GroupViolation_ShowsGroupHelp(t *testing.T) {
 	// Parse with both flags -> violation
 	p := NewParser(app)
 	_, err := p.Parse([]string{"--json", "--yaml"})
+	//nolint:nestif // this is acceptable for testing purposes
 	if err != nil {
 		// send through app's handler to display group context
 		pe := &ParseError{}
