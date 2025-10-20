@@ -41,6 +41,13 @@
   * With `ShowHelpOnError(true)`, errors are no longer printed twice
   * Library prints help text, returns formatted error for user to print
   * Clean separation: help → error message (printed once by user)
+- **Command-level flag suggestions now work correctly**
+  * Added `CurrentCommand` field to `ParseError` to track command context during parsing
+  * Parser now populates command context when creating unknown flag/command errors
+  * Flag suggestions now include both app-level and command-level flags
+  * Command suggestions now include both app commands and subcommands
+  * Example: `greet --tims` now suggests `--times` (command-level flag)
+  * Previously only app-level flags were checked, causing suggestions to fail in command context
 - **Cyclomatic complexity lint warning** in `RunWithArgs()` suppressed with `//nolint:cyclop`
   * Main execution flow has inherent complexity due to multiple paths
   * Suppression is appropriate for framework entry points
