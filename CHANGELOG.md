@@ -1,5 +1,56 @@
 # Changelog
 
+## [0.2.3] - 2025-01-21
+
+### Changed
+- **Error handling refactored for consistency and user control** (BREAKING CHANGE)
+  * Library no longer prints errors automatically - user code controls all error output
+  * `app.Run()` now returns `nil` when help or version is shown (previously returned sentinel errors)
+  * Removed public sentinel errors `ErrHelpShown` and `ErrVersionShown` (now internal)
+  * Error suggestions (fuzzy matching) are now **opt-in** instead of enabled by default
+  * Users must explicitly call `.SuggestCommands(true)` and `.SuggestFlags(true)` to enable suggestions
+  * `FormatError()` renamed to private `formatError()` to avoid interfering with fluent API
+  * Migration guide:
+    ```go
+    // Before (0.2.2):
+    if err := app.Run(); err != nil {
+        if err != snap.ErrHelpShown && err != snap.ErrVersionShown {
+            fmt.Fprintln(os.Stderr, err)
+            os.Exit(1)
+        }
+    }
+
+    // After (0.2.3):
+    // Enable suggestions (opt-in):
+    app.ErrorHandler().SuggestCommands(true).SuggestFlags(true)
+    
+    // Simple error handling:
+    if err := app.Run(); err != nil {
+        fmt.Fprintln(os.Stderr, err)
+        os.Exit(1)
+    }
+    ```
+
+### Fixed
+- **Duplicate error suggestions eliminated**
+  * Parser no longer embeds suggestions in error messages
+  * Error handler adds formatted suggestions based on user configuration
+  * Clean single-line output: `Error: unknown command: gret\n  Did you mean 'greet'?`
+  * Previously showed: `Error: unknown command: gret. Did you mean 'greet'?\n  Did you mean 'greet'?`
+- **Double error printing resolved**
+  * With `ShowHelpOnError(true)`, errors are no longer printed twice
+  * Library prints help text, returns formatted error for user to print
+  * Clean separation: help → error message (printed once by user)
+- **Cyclomatic complexity lint warning** in `RunWithArgs()` suppressed with `//nolint:cyclop`
+  * Main execution flow has inherent complexity due to multiple paths
+  * Suppression is appropriate for framework entry points
+
+### Design Improvements
+- **Consistent error philosophy**: Libraries format errors, applications print them
+- **Help/version as success operations**: Returning `nil` makes semantic sense
+- **Opt-in features**: Suggestions disabled by default, explicit enablement required
+- **Clean API boundaries**: Private methods don't interfere with public fluent API
+
 ## [0.2.2] - 2025-01-20
 
 ### Fixed
