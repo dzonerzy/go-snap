@@ -15,8 +15,9 @@ import (
 
 // Special error types for graceful exits
 var (
-	ErrHelpShown    = errors.New("help shown")
-	ErrVersionShown = errors.New("version shown")
+	// Internal sentinel errors for help/version - not exposed to users
+	errHelpShown    = errors.New("help shown")
+	errVersionShown = errors.New("version shown")
 )
 
 // ActionFunc defines the command execution function
@@ -401,6 +402,10 @@ func (a *App) RunWithArgs(ctx context.Context, args []string) error {
 
 	// Handle built-in flags BEFORE populating configuration
 	if helpErr := a.handleHelpAndVersion(result); helpErr != nil {
+		// Convert internal sentinels to nil - help/version are not errors
+		if errors.Is(helpErr, errHelpShown) || errors.Is(helpErr, errVersionShown) {
+			return nil
+		}
 		return helpErr
 	}
 
@@ -623,11 +628,19 @@ func (a *App) handleParseError(parseErr *ParseError) error {
 		// No additional context for these types here.
 	}
 
-	// Process error with smart suggestions
+	// Process error with smart suggestions and format the error message
 	cliErr = a.errorHandler.ProcessError(cliErr, a)
+	cliErr = a.errorHandler.FormatError(cliErr, a)
 
-	// Display the error with contextual help
-	a.errorHandler.DisplayError(cliErr, a)
+	// If ShowHelpOnError is enabled, print contextual help to stderr before returning the error
+	if a.errorHandler.showHelpOnError {
+		if a.currentResult != nil && a.currentResult.Command != nil {
+			_ = a.showCommandHelp(a.currentResult.Command)
+		} else {
+			_ = a.showHelp()
+		}
+		a.println("") // Add spacing between help and error
+	}
 
 	return cliErr
 }
@@ -1330,7 +1343,8 @@ func (a *App) handleHelpAndVersion(result *ParseResult) error {
 		if err := a.showContextualHelp(result); err != nil {
 			return err
 		}
-		return ErrHelpShown
+		// Return internal sentinel - will be converted to nil at RunWithArgs level
+		return errHelpShown
 	}
 
 	// Handle version flag across all command levels
@@ -1338,7 +1352,8 @@ func (a *App) handleHelpAndVersion(result *ParseResult) error {
 		if err := a.showContextualVersion(result); err != nil {
 			return err
 		}
-		return ErrVersionShown
+		// Return internal sentinel - will be converted to nil at RunWithArgs level
+		return errVersionShown
 	}
 
 	return nil
