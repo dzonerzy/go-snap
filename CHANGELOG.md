@@ -32,6 +32,11 @@
     ```
 
 ### Fixed
+- **Global flags now shown in command help**
+  * Command help (e.g., `myapp command --help`) now displays a "Global Flags:" section
+  * Shows all flags marked as `.Global()` that are available to all commands
+  * Improves discoverability of global options when viewing command-specific help
+  * Example: `greet --help` now shows `--name` and `--verbose` global flags
 - **Duplicate error suggestions eliminated**
   * Parser no longer embeds suggestions in error messages
   * Error handler adds formatted suggestions based on user configuration

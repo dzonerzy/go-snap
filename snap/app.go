@@ -1167,6 +1167,9 @@ func (a *App) showCommandHelp(cmd *Command) error {
 	// Command-specific flags (organized by groups, deterministic order)
 	a.showOrganizedCommandFlags(cmd)
 
+	// Global flags (available to all commands)
+	a.showGlobalFlags()
+
 	// Positional arguments
 	a.printArgumentsSection(cmd.args, cmd.hasRestArgs)
 
@@ -1309,6 +1312,45 @@ func (a *App) showOrganizedCommandFlags(cmd *Command) {
 		for _, name := range ungrouped {
 			a.showFlag(cmd.flags[name], maxWidth)
 		}
+	}
+}
+
+// showGlobalFlags displays global flags that are available to all commands
+func (a *App) showGlobalFlags() {
+	// Collect global flags
+	globalFlags := make([]*Flag, 0)
+	for _, flag := range a.flags {
+		if flag.Global && !flag.Hidden {
+			globalFlags = append(globalFlags, flag)
+		}
+	}
+
+	if len(globalFlags) == 0 {
+		return
+	}
+
+	// Calculate max width for alignment
+	maxWidth := 0
+	for _, flag := range globalFlags {
+		width := flagDisplayWidth(flag)
+		if width > maxWidth {
+			maxWidth = width
+		}
+	}
+
+	// Sort global flags by name
+	for i := 0; i < len(globalFlags); i++ {
+		for j := i + 1; j < len(globalFlags); j++ {
+			if globalFlags[j].Name < globalFlags[i].Name {
+				globalFlags[i], globalFlags[j] = globalFlags[j], globalFlags[i]
+			}
+		}
+	}
+
+	a.println()
+	a.println("Global Flags:")
+	for _, flag := range globalFlags {
+		a.showFlag(flag, maxWidth)
 	}
 }
 
