@@ -69,7 +69,8 @@ Running
 ```go
 if err != nil { panic(err) }
 if err := app.Run(); err != nil {
-    // handle (help/version return sentinel errors ErrHelpShown / ErrVersionShown)
+    // handle error (help/version return nil, not an error)
+    log.Fatalf("Error: %v", err)
 }
 // cfg is now fully populated with precedence applied
 ```
