@@ -15,8 +15,9 @@ import (
 
 // Special error types for graceful exits
 var (
-	ErrHelpShown    = errors.New("help shown")
-	ErrVersionShown = errors.New("version shown")
+	// Internal sentinel errors for help/version - not exposed to users
+	errHelpShown    = errors.New("help shown")
+	errVersionShown = errors.New("version shown")
 )
 
 // ActionFunc defines the command execution function
@@ -367,7 +368,7 @@ func (a *App) RunContext(ctx context.Context) error {
 
 // RunWithArgs runs the application with provided arguments
 //
-//nolint:gocognit,nestif,funlen // Main execution flow is inherently complex
+//nolint:gocognit,nestif,funlen,cyclop // Main execution flow is inherently complex
 func (a *App) RunWithArgs(ctx context.Context, args []string) error {
 	// Store raw arguments before parsing for later access via Context.RawArgs()
 	a.rawArgs = args
@@ -401,6 +402,10 @@ func (a *App) RunWithArgs(ctx context.Context, args []string) error {
 
 	// Handle built-in flags BEFORE populating configuration
 	if helpErr := a.handleHelpAndVersion(result); helpErr != nil {
+		// Convert internal sentinels to nil - help/version are not errors
+		if errors.Is(helpErr, errHelpShown) || errors.Is(helpErr, errVersionShown) {
+			return nil
+		}
 		return helpErr
 	}
 
@@ -609,9 +614,17 @@ func (a *App) handleParseError(parseErr *ParseError) error {
 		if parseErr.Flag != "" {
 			cliErr = cliErr.WithContext("flag", parseErr.Flag)
 		}
+		// Add command context for flag suggestions
+		if parseErr.CurrentCommand != nil {
+			cliErr = cliErr.WithContext("current_command", parseErr.CurrentCommand)
+		}
 	case ErrorTypeUnknownCommand:
 		if parseErr.Command != "" {
 			cliErr = cliErr.WithContext("command", parseErr.Command)
+		}
+		// Add command context for subcommand suggestions
+		if parseErr.CurrentCommand != nil {
+			cliErr = cliErr.WithContext("current_command", parseErr.CurrentCommand)
 		}
 	case ErrorTypeFlagGroupViolation:
 		if parseErr.GroupName != "" {
@@ -623,11 +636,19 @@ func (a *App) handleParseError(parseErr *ParseError) error {
 		// No additional context for these types here.
 	}
 
-	// Process error with smart suggestions
+	// Process error with smart suggestions and format the error message
 	cliErr = a.errorHandler.ProcessError(cliErr, a)
+	cliErr = a.errorHandler.formatError(cliErr, a)
 
-	// Display the error with contextual help
-	a.errorHandler.DisplayError(cliErr, a)
+	// If ShowHelpOnError is enabled, print contextual help to stderr before returning the error
+	if a.errorHandler.showHelpOnError {
+		if a.currentResult != nil && a.currentResult.Command != nil {
+			_ = a.showCommandHelp(a.currentResult.Command)
+		} else {
+			_ = a.showHelp()
+		}
+		a.println("") // Add spacing between help and error
+	}
 
 	return cliErr
 }
@@ -1146,6 +1167,9 @@ func (a *App) showCommandHelp(cmd *Command) error {
 	// Command-specific flags (organized by groups, deterministic order)
 	a.showOrganizedCommandFlags(cmd)
 
+	// Global flags (available to all commands)
+	a.showGlobalFlags()
+
 	// Positional arguments
 	a.printArgumentsSection(cmd.args, cmd.hasRestArgs)
 
@@ -1291,6 +1315,45 @@ func (a *App) showOrganizedCommandFlags(cmd *Command) {
 	}
 }
 
+// showGlobalFlags displays global flags that are available to all commands
+func (a *App) showGlobalFlags() {
+	// Collect global flags
+	globalFlags := make([]*Flag, 0)
+	for _, flag := range a.flags {
+		if flag.Global && !flag.Hidden {
+			globalFlags = append(globalFlags, flag)
+		}
+	}
+
+	if len(globalFlags) == 0 {
+		return
+	}
+
+	// Calculate max width for alignment
+	maxWidth := 0
+	for _, flag := range globalFlags {
+		width := flagDisplayWidth(flag)
+		if width > maxWidth {
+			maxWidth = width
+		}
+	}
+
+	// Sort global flags by name
+	for i := 0; i < len(globalFlags); i++ {
+		for j := i + 1; j < len(globalFlags); j++ {
+			if globalFlags[j].Name < globalFlags[i].Name {
+				globalFlags[i], globalFlags[j] = globalFlags[j], globalFlags[i]
+			}
+		}
+	}
+
+	a.println()
+	a.println("Global Flags:")
+	for _, flag := range globalFlags {
+		a.showFlag(flag, maxWidth)
+	}
+}
+
 // populateConfiguration handles configuration population during App.Run()
 func (a *App) populateConfiguration() error {
 	if a.configBuilder == nil {
@@ -1330,7 +1393,8 @@ func (a *App) handleHelpAndVersion(result *ParseResult) error {
 		if err := a.showContextualHelp(result); err != nil {
 			return err
 		}
-		return ErrHelpShown
+		// Return internal sentinel - will be converted to nil at RunWithArgs level
+		return errHelpShown
 	}
 
 	// Handle version flag across all command levels
@@ -1338,7 +1402,8 @@ func (a *App) handleHelpAndVersion(result *ParseResult) error {
 		if err := a.showContextualVersion(result); err != nil {
 			return err
 		}
-		return ErrVersionShown
+		// Return internal sentinel - will be converted to nil at RunWithArgs level
+		return errVersionShown
 	}
 
 	return nil

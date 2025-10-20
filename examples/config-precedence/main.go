@@ -82,11 +82,7 @@ func main() {
 
 	// Run the app (this will handle --help, parse flags, and populate config)
 	if err := app.Run(); err != nil {
-		// Check if it's a graceful exit (help/version shown)
-		if err == snap.ErrHelpShown || err == snap.ErrVersionShown {
-			// Graceful exit - help or version was shown
-			return
-		}
+		// Help and version return nil now, so any error here is a real error
 		log.Fatalf("❌ Application error: %v", err)
 	}
 

@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -568,31 +567,6 @@ func TestExitCodes_Minimal(t *testing.T) {
 	}
 }
 
-// captureStderr captures stderr output during fn
-func captureStderr(fn func()) string {
-	old := os.Stderr
-	r, w, _ := os.Pipe()
-	//nolint:reassign // intentionally redirect os.Stderr in tests to capture output
-	os.Stderr = w
-	fn()
-	w.Close()
-	//nolint:reassign // intentionally redirect os.Stderr in tests to capture output
-	os.Stderr = old
-	var sb strings.Builder
-	buf := make([]byte, 4096)
-	for {
-		n, _ := r.Read(buf)
-		if n <= 0 {
-			break
-		}
-		sb.Write(buf[:n])
-		if n < len(buf) {
-			break
-		}
-	}
-	return sb.String()
-}
-
 // Error display should include group help context for flag group violations
 func TestErrorDisplay_GroupViolation_ShowsGroupHelp(t *testing.T) {
 	app := New("x", "")
@@ -603,22 +577,23 @@ func TestErrorDisplay_GroupViolation_ShowsGroupHelp(t *testing.T) {
 	g.EndGroup()
 	// Parse with both flags -> violation
 	p := NewParser(app)
-	out := captureStderr(func() {
-		_, err := p.Parse([]string{"--json", "--yaml"})
-		if err != nil {
-			// send through app's handler to display group context
-			pe := &ParseError{}
-			if errors.As(err, &pe) {
-				_ = app.handleParseError(pe)
-			} else {
-				t.Fatalf("unexpected error type: %T", err)
+	_, err := p.Parse([]string{"--json", "--yaml"})
+	//nolint:nestif // this is acceptable for testing purposes
+	if err != nil {
+		// send through app's handler to display group context
+		pe := &ParseError{}
+		if errors.As(err, &pe) {
+			cliErr := app.handleParseError(pe)
+			// Check that the formatted error contains flag group help
+			errMsg := cliErr.Error()
+			if !strings.Contains(errMsg, "Flag group 'output'") || !strings.Contains(errMsg, "Constraint:") {
+				t.Fatalf("expected group help in error message, got: %s", errMsg)
 			}
 		} else {
-			t.Fatalf("expected error")
+			t.Fatalf("unexpected error type: %T", err)
 		}
-	})
-	if !strings.Contains(out, "Flag group 'output'") || !strings.Contains(out, "Constraint:") {
-		t.Fatalf("expected group help in stderr, got: %s", out)
+	} else {
+		t.Fatalf("expected error")
 	}
 }
 
@@ -631,16 +606,16 @@ func TestHelpAndVersionAcrossContexts(t *testing.T) {
 	app.IO().WithOut(&buf).WithErr(&buf)
 
 	sub := app.Command("serve", "serves").Build()
-	// top-level --help
-	if err := app.RunWithArgs(context.Background(), []string{"--help"}); !errors.Is(err, ErrHelpShown) {
-		t.Fatalf("expected ErrHelpShown, got %v", err)
+	// top-level --help - should return nil (success, not an error)
+	if err := app.RunWithArgs(context.Background(), []string{"--help"}); err != nil {
+		t.Fatalf("expected nil for help, got %v", err)
 	}
-	// subcommand --help
+	// subcommand --help - should return nil (success, not an error)
 	p := NewParser(app)
 	res, _ := p.Parse([]string{"serve", "--help"})
 	app.currentResult = res
-	if err := app.RunWithArgs(context.Background(), []string{"serve", "--help"}); !errors.Is(err, ErrHelpShown) {
-		t.Fatalf("expected ErrHelpShown for subcommand, got %v", err)
+	if err := app.RunWithArgs(context.Background(), []string{"serve", "--help"}); err != nil {
+		t.Fatalf("expected nil for subcommand help, got %v", err)
 	}
 	_ = sub // silence
 }

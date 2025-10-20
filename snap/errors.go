@@ -2,7 +2,7 @@ package snap
 
 import (
 	"fmt"
-	"os"
+	"strings"
 
 	"github.com/dzonerzy/go-snap/internal/fuzzy"
 )
@@ -27,12 +27,13 @@ const (
 
 // ParseError represents parsing-specific errors (used by parser.go)
 type ParseError struct {
-	Type       ErrorType
-	Message    string
-	Flag       string
-	Command    string
-	GroupName  string // For flag group errors - enables contextual help
-	Suggestion string
+	Type           ErrorType
+	Message        string
+	Flag           string
+	Command        string
+	GroupName      string // For flag group errors - enables contextual help
+	Suggestion     string
+	CurrentCommand *Command // The command context where error occurred (for flag suggestions)
 }
 
 func (e *ParseError) Error() string {
@@ -49,15 +50,20 @@ func NewParseError(errType ErrorType, message string) *ParseError {
 
 // CLIError is an enhanced error type with smart suggestions (see SPECS.md).
 type CLIError struct {
-	Type        ErrorType
-	Message     string
-	Suggestions []string
-	Cause       error
-	Context     map[string]any
+	Type           ErrorType
+	Message        string
+	Suggestions    []string
+	Cause          error
+	Context        map[string]any
+	formattedError string // Full formatted error message including suggestions and help
 }
 
 // Error implements the error interface
 func (e *CLIError) Error() string {
+	// Return the fully formatted error if available, otherwise just the message
+	if e.formattedError != "" {
+		return e.formattedError
+	}
 	return e.Message
 }
 
@@ -103,8 +109,8 @@ type ErrorHandler struct {
 // NewErrorHandler creates a new error handler with defaults
 func NewErrorHandler() *ErrorHandler {
 	return &ErrorHandler{
-		suggestCommands: true,
-		suggestFlags:    true,
+		suggestCommands: false, // Disabled by default - user must opt-in
+		suggestFlags:    false, // Disabled by default - user must opt-in
 		maxDistance:     2,
 		customHandlers:  make(map[ErrorType]func(*CLIError) *CLIError),
 	}
@@ -174,8 +180,14 @@ func (eh *ErrorHandler) ProcessError(err *CLIError, app *App) *CLIError {
 // addFlagSuggestions adds fuzzy-matched flag suggestions using internal/fuzzy.
 func (eh *ErrorHandler) addFlagSuggestions(err *CLIError, app *App) {
 	if flagName, ok := err.Context["flag"].(string); ok {
+		// Get command context if available
+		var currentCmd *Command
+		if cmd, okCmd := err.Context["current_command"].(*Command); okCmd {
+			currentCmd = cmd
+		}
+
 		// Find similar flag names using fuzzy matching
-		bestMatch := eh.findBestFlagMatch(flagName, app)
+		bestMatch := eh.findBestFlagMatch(flagName, app, currentCmd)
 		if bestMatch != "" {
 			_ = err.WithSuggestion(fmt.Sprintf("Did you mean '--%s'?", bestMatch))
 		}
@@ -207,86 +219,103 @@ func (eh *ErrorHandler) addGroupContext(err *CLIError, app *App) {
 }
 
 // Efficient fuzzy matching using internal/fuzzy package
-func (eh *ErrorHandler) findBestFlagMatch(input string, app *App) string {
+func (eh *ErrorHandler) findBestFlagMatch(input string, app *App, currentCmd *Command) string {
+	// Collect app-level flags
 	flagNames := make([]string, 0, len(app.flags))
 	for flagName := range app.flags {
 		flagNames = append(flagNames, flagName)
 	}
+
+	// If we're in a command context, also include command-level flags
+	if currentCmd != nil {
+		for flagName := range currentCmd.flags {
+			flagNames = append(flagNames, flagName)
+		}
+	}
+
 	return fuzzy.FindBestFlag(input, flagNames, eh.maxDistance)
 }
 
 func (eh *ErrorHandler) findBestCommandMatch(input string, app *App) string {
+	// Collect app-level commands
 	cmdNames := make([]string, 0, len(app.commands))
 	for cmdName := range app.commands {
 		cmdNames = append(cmdNames, cmdName)
 	}
+
+	// If we're in a command context, also include subcommands
+	if app.currentResult != nil && app.currentResult.Command != nil {
+		for cmdName := range app.currentResult.Command.subcommands {
+			cmdNames = append(cmdNames, cmdName)
+		}
+	}
+
 	return fuzzy.FindBestCommand(input, cmdNames, eh.maxDistance)
 }
 
-// DisplayError shows a user-friendly error message
-func (eh *ErrorHandler) DisplayError(err *CLIError, app *App) {
-	// Display the main error message
-	fmt.Fprintf(os.Stderr, "Error: %s\n", err.Message)
+// formatError builds the error message with suggestions.
+// The formatted message is stored in the CLIError and returned by Error().
+// Note: This does NOT include help text - help should be printed separately if ShowHelpOnError is enabled.
+func (eh *ErrorHandler) formatError(err *CLIError, app *App) *CLIError {
+	var builder strings.Builder
 
-	// Display suggestions if any
+	// Build the main error message
+	builder.WriteString(fmt.Sprintf("Error: %s\n", err.Message))
+
+	// Add suggestions if any
 	for _, suggestion := range err.Suggestions {
-		fmt.Fprintf(os.Stderr, "  %s\n", suggestion)
+		builder.WriteString(fmt.Sprintf("  %s\n", suggestion))
 	}
 
-	// For flag group violations, show contextual help
+	// For flag group violations, add group help
 	if err.Type == ErrorTypeFlagGroupViolation {
 		if groupName, ok := err.Context["group"].(string); ok {
-			fmt.Fprintf(os.Stderr, "\n")
-			eh.showFlagGroupHelp(groupName, app)
+			builder.WriteString("\n")
+			builder.WriteString(eh.formatFlagGroupHelp(groupName, app))
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "\n")
-
-	// Optionally print contextual help after the error
-	if eh.showHelpOnError {
-		if app.currentResult != nil && app.currentResult.Command != nil {
-			_ = app.showCommandHelp(app.currentResult.Command)
-		} else {
-			_ = app.showHelp()
-		}
-		fmt.Fprintf(os.Stderr, "\n")
-	}
+	// Store the formatted error (without trailing newline for cleaner output)
+	err.formattedError = strings.TrimRight(builder.String(), "\n")
+	return err
 }
 
-// showFlagGroupHelp displays help for a specific flag group
-func (eh *ErrorHandler) showFlagGroupHelp(groupName string, app *App) {
+// formatFlagGroupHelp builds help text for a specific flag group
+func (eh *ErrorHandler) formatFlagGroupHelp(groupName string, app *App) string {
+	var builder strings.Builder
+
 	for _, group := range app.flagGroups {
 		if group.Name == groupName {
-			fmt.Fprintf(os.Stderr, "Flag group '%s':\n", groupName)
+			builder.WriteString(fmt.Sprintf("Flag group '%s':\n", groupName))
 			if group.Description != "" {
-				fmt.Fprintf(os.Stderr, "  %s\n", group.Description)
+				builder.WriteString(fmt.Sprintf("  %s\n", group.Description))
 			}
 
 			for _, flag := range group.Flags {
-				fmt.Fprintf(os.Stderr, "  --%s    %s\n", flag.Name, flag.Description)
+				builder.WriteString(fmt.Sprintf("  --%s    %s\n", flag.Name, flag.Description))
 			}
 
-			fmt.Fprintf(os.Stderr, "\nConstraint: %s\n", eh.formatConstraint(group.Constraint))
-			break
+			builder.WriteString(fmt.Sprintf("\nConstraint: %s\n", eh.formatConstraint(group.Constraint)))
+			return builder.String()
 		}
 	}
 	// Also check current command's groups if not found at app level
 	if app.currentResult != nil && app.currentResult.Command != nil {
 		for _, group := range app.currentResult.Command.flagGroups {
 			if group.Name == groupName {
-				fmt.Fprintf(os.Stderr, "Flag group '%s':\n", groupName)
+				builder.WriteString(fmt.Sprintf("Flag group '%s':\n", groupName))
 				if group.Description != "" {
-					fmt.Fprintf(os.Stderr, "  %s\n", group.Description)
+					builder.WriteString(fmt.Sprintf("  %s\n", group.Description))
 				}
 				for _, flag := range group.Flags {
-					fmt.Fprintf(os.Stderr, "  --%s    %s\n", flag.Name, flag.Description)
+					builder.WriteString(fmt.Sprintf("  --%s    %s\n", flag.Name, flag.Description))
 				}
-				fmt.Fprintf(os.Stderr, "\nConstraint: %s\n", eh.formatConstraint(group.Constraint))
-				break
+				builder.WriteString(fmt.Sprintf("\nConstraint: %s\n", eh.formatConstraint(group.Constraint)))
+				return builder.String()
 			}
 		}
 	}
+	return ""
 }
 
 // formatConstraint returns a human-readable description of the constraint

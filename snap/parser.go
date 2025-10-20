@@ -617,21 +617,17 @@ func (p *Parser) createUnknownFlagError(name string) error {
 	suggestion := p.findClosestFlag(name)
 
 	// Pre-allocate error message to avoid allocations
+	// Note: Don't embed suggestion in message - error handler will add it
 	p.resetStringBuilder()
 	p.appendString("unknown flag: --")
 	p.appendString(name)
-
-	if suggestion != "" {
-		p.appendString(". Did you mean --")
-		p.appendString(suggestion)
-		p.appendString("?")
-	}
 
 	// Reuse pre-allocated error to avoid allocations, but copy string to avoid aliasing
 	p.reusableError.Type = ErrorTypeUnknownFlag
 	p.reusableError.Message = string(append([]byte(nil), p.valueBuffer...))
 	p.reusableError.Flag = name
 	p.reusableError.Suggestion = suggestion
+	p.reusableError.CurrentCommand = p.currentCmd
 	return p.reusableError
 }
 
@@ -641,21 +637,17 @@ func (p *Parser) createUnknownCommandError(name string) error {
 	suggestion := p.findClosestCommand(name)
 
 	// Pre-allocate error message to avoid allocations
+	// Note: Don't embed suggestion in message - error handler will add it
 	p.resetStringBuilder()
 	p.appendString("unknown command: ")
 	p.appendString(name)
-
-	if suggestion != "" {
-		p.appendString(". Did you mean '")
-		p.appendString(suggestion)
-		p.appendString("'?")
-	}
 
 	// Reuse pre-allocated error to avoid allocations, but copy string to avoid aliasing
 	p.reusableError.Type = ErrorTypeUnknownCommand
 	p.reusableError.Message = string(append([]byte(nil), p.valueBuffer...))
 	p.reusableError.Command = name
 	p.reusableError.Suggestion = suggestion
+	p.reusableError.CurrentCommand = p.currentCmd
 	return p.reusableError
 }
 
