@@ -16,6 +16,12 @@ func main() {
 		StringFlag("name", "Your name").Default("world").Global().Back().
 		BoolFlag("verbose", "Verbose output").Short('v').Global().Back()
 
+	// Enable smart error suggestions
+	app.ErrorHandler().
+		SuggestCommands(true).
+		SuggestFlags(true).
+		ShowHelpOnError(true)
+
 	// greet command: prints a greeting N times
 	app.Command("greet", "Print a friendly greeting").
 		IntFlag("times", "How many times").Default(1).Back().
@@ -40,6 +46,9 @@ func main() {
 			return nil
 		})
 
-	// Default to help when no command is given
-	app.RunAndExit()
+	// Run the app and handle errors
+	if err := app.Run(); err != nil {
+		fmt.Fprintf(app.IO().Err(), "%v\n", err)
+		return
+	}
 }
