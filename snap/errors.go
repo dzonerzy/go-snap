@@ -2,7 +2,7 @@ package snap
 
 import (
 	"fmt"
-	"os"
+	"strings"
 
 	"github.com/dzonerzy/go-snap/internal/fuzzy"
 )
@@ -49,15 +49,20 @@ func NewParseError(errType ErrorType, message string) *ParseError {
 
 // CLIError is an enhanced error type with smart suggestions (see SPECS.md).
 type CLIError struct {
-	Type        ErrorType
-	Message     string
-	Suggestions []string
-	Cause       error
-	Context     map[string]any
+	Type           ErrorType
+	Message        string
+	Suggestions    []string
+	Cause          error
+	Context        map[string]any
+	formattedError string // Full formatted error message including suggestions and help
 }
 
 // Error implements the error interface
 func (e *CLIError) Error() string {
+	// Return the fully formatted error if available, otherwise just the message
+	if e.formattedError != "" {
+		return e.formattedError
+	}
 	return e.Message
 }
 
@@ -223,70 +228,69 @@ func (eh *ErrorHandler) findBestCommandMatch(input string, app *App) string {
 	return fuzzy.FindBestCommand(input, cmdNames, eh.maxDistance)
 }
 
-// DisplayError shows a user-friendly error message
-func (eh *ErrorHandler) DisplayError(err *CLIError, app *App) {
-	// Display the main error message
-	fmt.Fprintf(os.Stderr, "Error: %s\n", err.Message)
+// FormatError builds the error message with suggestions.
+// The formatted message is stored in the CLIError and returned by Error().
+// Note: This does NOT include help text - help should be printed separately if ShowHelpOnError is enabled.
+func (eh *ErrorHandler) FormatError(err *CLIError, app *App) *CLIError {
+	var builder strings.Builder
 
-	// Display suggestions if any
+	// Build the main error message
+	builder.WriteString(fmt.Sprintf("Error: %s\n", err.Message))
+
+	// Add suggestions if any
 	for _, suggestion := range err.Suggestions {
-		fmt.Fprintf(os.Stderr, "  %s\n", suggestion)
+		builder.WriteString(fmt.Sprintf("  %s\n", suggestion))
 	}
 
-	// For flag group violations, show contextual help
+	// For flag group violations, add group help
 	if err.Type == ErrorTypeFlagGroupViolation {
 		if groupName, ok := err.Context["group"].(string); ok {
-			fmt.Fprintf(os.Stderr, "\n")
-			eh.showFlagGroupHelp(groupName, app)
+			builder.WriteString("\n")
+			builder.WriteString(eh.formatFlagGroupHelp(groupName, app))
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "\n")
-
-	// Optionally print contextual help after the error
-	if eh.showHelpOnError {
-		if app.currentResult != nil && app.currentResult.Command != nil {
-			_ = app.showCommandHelp(app.currentResult.Command)
-		} else {
-			_ = app.showHelp()
-		}
-		fmt.Fprintf(os.Stderr, "\n")
-	}
+	// Store the formatted error (without trailing newline for cleaner output)
+	err.formattedError = strings.TrimRight(builder.String(), "\n")
+	return err
 }
 
-// showFlagGroupHelp displays help for a specific flag group
-func (eh *ErrorHandler) showFlagGroupHelp(groupName string, app *App) {
+// formatFlagGroupHelp builds help text for a specific flag group
+func (eh *ErrorHandler) formatFlagGroupHelp(groupName string, app *App) string {
+	var builder strings.Builder
+
 	for _, group := range app.flagGroups {
 		if group.Name == groupName {
-			fmt.Fprintf(os.Stderr, "Flag group '%s':\n", groupName)
+			builder.WriteString(fmt.Sprintf("Flag group '%s':\n", groupName))
 			if group.Description != "" {
-				fmt.Fprintf(os.Stderr, "  %s\n", group.Description)
+				builder.WriteString(fmt.Sprintf("  %s\n", group.Description))
 			}
 
 			for _, flag := range group.Flags {
-				fmt.Fprintf(os.Stderr, "  --%s    %s\n", flag.Name, flag.Description)
+				builder.WriteString(fmt.Sprintf("  --%s    %s\n", flag.Name, flag.Description))
 			}
 
-			fmt.Fprintf(os.Stderr, "\nConstraint: %s\n", eh.formatConstraint(group.Constraint))
-			break
+			builder.WriteString(fmt.Sprintf("\nConstraint: %s\n", eh.formatConstraint(group.Constraint)))
+			return builder.String()
 		}
 	}
 	// Also check current command's groups if not found at app level
 	if app.currentResult != nil && app.currentResult.Command != nil {
 		for _, group := range app.currentResult.Command.flagGroups {
 			if group.Name == groupName {
-				fmt.Fprintf(os.Stderr, "Flag group '%s':\n", groupName)
+				builder.WriteString(fmt.Sprintf("Flag group '%s':\n", groupName))
 				if group.Description != "" {
-					fmt.Fprintf(os.Stderr, "  %s\n", group.Description)
+					builder.WriteString(fmt.Sprintf("  %s\n", group.Description))
 				}
 				for _, flag := range group.Flags {
-					fmt.Fprintf(os.Stderr, "  --%s    %s\n", flag.Name, flag.Description)
+					builder.WriteString(fmt.Sprintf("  --%s    %s\n", flag.Name, flag.Description))
 				}
-				fmt.Fprintf(os.Stderr, "\nConstraint: %s\n", eh.formatConstraint(group.Constraint))
-				break
+				builder.WriteString(fmt.Sprintf("\nConstraint: %s\n", eh.formatConstraint(group.Constraint)))
+				return builder.String()
 			}
 		}
 	}
+	return ""
 }
 
 // formatConstraint returns a human-readable description of the constraint
