@@ -108,8 +108,8 @@ type ErrorHandler struct {
 // NewErrorHandler creates a new error handler with defaults
 func NewErrorHandler() *ErrorHandler {
 	return &ErrorHandler{
-		suggestCommands: true,
-		suggestFlags:    true,
+		suggestCommands: false, // Disabled by default - user must opt-in
+		suggestFlags:    false, // Disabled by default - user must opt-in
 		maxDistance:     2,
 		customHandlers:  make(map[ErrorType]func(*CLIError) *CLIError),
 	}
@@ -228,10 +228,10 @@ func (eh *ErrorHandler) findBestCommandMatch(input string, app *App) string {
 	return fuzzy.FindBestCommand(input, cmdNames, eh.maxDistance)
 }
 
-// FormatError builds the error message with suggestions.
+// formatError builds the error message with suggestions.
 // The formatted message is stored in the CLIError and returned by Error().
 // Note: This does NOT include help text - help should be printed separately if ShowHelpOnError is enabled.
-func (eh *ErrorHandler) FormatError(err *CLIError, app *App) *CLIError {
+func (eh *ErrorHandler) formatError(err *CLIError, app *App) *CLIError {
 	var builder strings.Builder
 
 	// Build the main error message
