@@ -680,7 +680,7 @@ func (a *App) addVersionFlag() {
 			Name:        "version",
 			Description: "Show version",
 			Type:        FlagTypeBool,
-			Global:      true,
+			Global:      false, // Version flag should only work at app level, not in subcommands
 		}
 		a.flags["version"] = flag
 	}

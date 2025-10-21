@@ -9,6 +9,11 @@
   * Parser already set `CurrentCommand` field correctly, but error handler wasn't using it
   * Example: `tool db impot` now correctly suggests "Did you mean 'import'?"
   * Both command and flag suggestions now work correctly for any nesting level
+- **Version flag is no longer global**
+  * `--version` now only works at the application level, not in subcommands
+  * `--help` remains global (works at any command level)
+  * This prevents `myapp command --version` from unexpectedly showing version instead of running the command
+  * Rationale: Version is an application-level concern, help is a command-level concern
 
 ## [0.2.3] - 2025-01-21
 
