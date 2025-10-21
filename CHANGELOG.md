@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.4] - 2025-01-21
+
+### Fixed
+- **Nested command suggestions now work correctly**
+  * Fixed bug where suggestions for nested/subcommands (e.g., `tool db import`) weren't working
+  * Updated `findBestCommandMatch()` to accept and use `currentCmd` parameter
+  * Parser already set `CurrentCommand` field correctly, but error handler wasn't using it
+  * Example: `tool db impot` now correctly suggests "Did you mean 'import'?"
+  * Both command and flag suggestions now work correctly for any nesting level
+
 ## [0.2.3] - 2025-01-21
 
 ### Changed
