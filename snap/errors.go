@@ -197,8 +197,14 @@ func (eh *ErrorHandler) addFlagSuggestions(err *CLIError, app *App) {
 // addCommandSuggestions adds fuzzy-matched command suggestions using internal/fuzzy.
 func (eh *ErrorHandler) addCommandSuggestions(err *CLIError, app *App) {
 	if cmdName, ok := err.Context["command"].(string); ok {
+		// Get command context if available
+		var currentCmd *Command
+		if cmd, okCmd := err.Context["current_command"].(*Command); okCmd {
+			currentCmd = cmd
+		}
+
 		// Find similar command names
-		bestMatch := eh.findBestCommandMatch(cmdName, app)
+		bestMatch := eh.findBestCommandMatch(cmdName, app, currentCmd)
 		if bestMatch != "" {
 			_ = err.WithSuggestion(fmt.Sprintf("Did you mean '%s'?", bestMatch))
 		}
@@ -236,7 +242,7 @@ func (eh *ErrorHandler) findBestFlagMatch(input string, app *App, currentCmd *Co
 	return fuzzy.FindBestFlag(input, flagNames, eh.maxDistance)
 }
 
-func (eh *ErrorHandler) findBestCommandMatch(input string, app *App) string {
+func (eh *ErrorHandler) findBestCommandMatch(input string, app *App, currentCmd *Command) string {
 	// Collect app-level commands
 	cmdNames := make([]string, 0, len(app.commands))
 	for cmdName := range app.commands {
@@ -244,8 +250,8 @@ func (eh *ErrorHandler) findBestCommandMatch(input string, app *App) string {
 	}
 
 	// If we're in a command context, also include subcommands
-	if app.currentResult != nil && app.currentResult.Command != nil {
-		for cmdName := range app.currentResult.Command.subcommands {
+	if currentCmd != nil {
+		for cmdName := range currentCmd.subcommands {
 			cmdNames = append(cmdNames, cmdName)
 		}
 	}
