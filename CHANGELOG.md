@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.5] - 2025-01-23
+
+### Fixed
+- **WrapDynamic mode now correctly preserves `--` separator**
+  * Fixed parser to preserve `--` (double dash) as a positional argument in WrapDynamic mode
+  * Critical for `--toolexec` support where tools like `cgo` use `--` to separate tool flags from compiler flags
+  * Example: `mytool shim /path/to/compile -- -N -l file.go` now correctly passes `--` to the wrapped command
+  * Parser still switches to positional args state after `--`, but in dynamic mode the `--` token itself is preserved
+  * Backward compatible: normal wrapper mode and regular parsing continue to consume `--` as before
+  * Fixes wrapper-go-build example and other toolexec use cases
+
 ## [0.2.4] - 2025-01-21
 
 ### Fixed
@@ -9,6 +20,11 @@
   * Parser already set `CurrentCommand` field correctly, but error handler wasn't using it
   * Example: `tool db impot` now correctly suggests "Did you mean 'import'?"
   * Both command and flag suggestions now work correctly for any nesting level
+- **Version flag is no longer global**
+  * `--version` now only works at the application level, not in subcommands
+  * `--help` remains global (works at any command level)
+  * This prevents `myapp command --version` from unexpectedly showing version instead of running the command
+  * Rationale: Version is an application-level concern, help is a command-level concern
 
 ## [0.2.3] - 2025-01-21
 

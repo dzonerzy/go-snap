@@ -801,3 +801,62 @@ func TestWrapManyParallelStopOnError(t *testing.T) {
 		t.Errorf("Expected all 3 to execute in parallel, got %d", count)
 	}
 }
+
+// TestWrapDynamic_PreservesDoubleDash tests that "--" is preserved in WrapDynamic mode
+// This is critical for tools like cgo that use "--" to separate tool flags from compiler flags
+func TestWrapDynamic_PreservesDoubleDash(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("/bin/echo required")
+	}
+	app := New("wr", "test")
+	var out bytes.Buffer
+	app.IO().WithOut(&out)
+
+	// WrapDynamic should preserve "--" as a positional argument
+	app.Command("shim", "dynamic shim").
+		WrapDynamic().
+		ForwardUnknownFlags().
+		Passthrough().
+		Back()
+
+	// Simulate toolexec invocation: shim /bin/echo -- -n hello
+	// The "--" should be passed through to echo
+	err := app.RunWithArgs(context.Background(), []string{"shim", "/bin/echo", "--", "hello", "world"})
+	if err != nil {
+		t.Fatalf("run error: %v", err)
+	}
+
+	// The output should include "--" because it's passed to echo as an argument
+	got := strings.TrimSpace(out.String())
+	if got != "-- hello world" {
+		t.Fatalf("expected '-- hello world', got %q", got)
+	}
+}
+
+// TestWrapper_DoubleDashConsumedInNormalMode tests that "--" is consumed (not passed through) in normal wrapper mode
+func TestWrapper_DoubleDashConsumedInNormalMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("/bin/echo required")
+	}
+	app := New("wr", "test")
+	var out bytes.Buffer
+	app.IO().WithOut(&out)
+
+	// Normal wrapper mode should consume "--"
+	app.Command("echo", "wrap echo").
+		Wrap("/bin/echo").
+		ForwardArgs().
+		Passthrough().
+		Back()
+
+	err := app.RunWithArgs(context.Background(), []string{"echo", "--", "hello"})
+	if err != nil {
+		t.Fatalf("run error: %v", err)
+	}
+
+	// The output should NOT include "--" because it's consumed by the parser
+	got := strings.TrimSpace(out.String())
+	if got != "hello" {
+		t.Fatalf("expected 'hello', got %q", got)
+	}
+}

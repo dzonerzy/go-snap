@@ -140,6 +140,8 @@ func (p *Parser) Parse(args []string) (*ParseResult, error) {
 }
 
 // parseArgument handles a single argument based on parser state
+//
+//nolint:gocognit,gocyclo,cyclop // This is acceptable because it's a complex function that handles many cases.
 func (p *Parser) parseArgument(arg string, allArgs []string) error {
 	// Convert to byte slice for zero-allocation operations
 	argBytes := stringToBytes(arg)
@@ -161,8 +163,23 @@ func (p *Parser) parseArgument(arg string, allArgs []string) error {
 	}
 
 	// "--" terminates flag parsing; subsequent tokens are positional args
+	// In WrapDynamic mode, we need to preserve "--" as a positional arg because
+	// tools like cgo use it to separate tool flags from compiler flags
 	if len(argBytes) == 2 && argBytes[0] == '-' && argBytes[1] == '-' {
 		p.state = StatePositionalArgs
+
+		// Check if we're in dynamic wrapper mode - if so, preserve "--" as positional arg
+		isDynamic := false
+		if p.currentCmd != nil && p.currentCmd.wrapper != nil && p.currentCmd.wrapper.Dynamic {
+			isDynamic = true
+		} else if p.app != nil && p.app.defaultWrapper != nil && p.app.defaultWrapper.Dynamic {
+			isDynamic = true
+		}
+
+		// In dynamic mode, add "--" as a positional argument instead of consuming it
+		if isDynamic {
+			return p.parsePositionalArg(argBytes)
+		}
 		return nil
 	}
 
