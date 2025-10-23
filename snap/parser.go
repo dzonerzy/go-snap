@@ -183,6 +183,18 @@ func (p *Parser) parseArgument(arg string, allArgs []string) error {
 		return nil
 	}
 
+	// In dynamic wrapper mode, treat all args as positional (don't parse flags)
+	// This prevents buildid values like -hoF... from being parsed as -h help flag
+	isDynamic := false
+	if p.currentCmd != nil && p.currentCmd.wrapper != nil && p.currentCmd.wrapper.Dynamic {
+		isDynamic = true
+	} else if p.app != nil && p.app.defaultWrapper != nil && p.app.defaultWrapper.Dynamic {
+		isDynamic = true
+	}
+	if isDynamic {
+		return p.parsePositionalArg(argBytes)
+	}
+
 	switch {
 	case len(argBytes) >= 2 && argBytes[0] == '-' && argBytes[1] == '-':
 		// Long flag: --flag or --flag=value

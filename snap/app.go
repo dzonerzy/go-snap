@@ -368,7 +368,7 @@ func (a *App) RunContext(ctx context.Context) error {
 
 // RunWithArgs runs the application with provided arguments
 //
-//nolint:gocognit,nestif,funlen,cyclop // Main execution flow is inherently complex
+//nolint:gocognit,nestif,funlen,cyclop,gocyclo // Main execution flow is inherently complex
 func (a *App) RunWithArgs(ctx context.Context, args []string) error {
 	// Store raw arguments before parsing for later access via Context.RawArgs()
 	a.rawArgs = args
@@ -447,7 +447,13 @@ func (a *App) RunWithArgs(ctx context.Context, args []string) error {
 		// Check command context: help vs action vs wrapper
 		switch {
 		case result.MustGetBool("help", false):
-			actionErr = a.showCommandHelp(result.Command)
+			// In dynamic wrapper mode, don't execute help - pass through to wrapped command
+			// This prevents buildid values starting with -h from triggering help
+			if result.Command.wrapper != nil && result.Command.wrapper.Dynamic {
+				actionErr = result.Command.wrapper.run(execCtx, args)
+			} else {
+				actionErr = a.showCommandHelp(result.Command)
+			}
 		case result.Command.Action != nil:
 			// Apply middleware and execute action
 			wrappedAction := a.wrapActionWithMiddleware(result.Command.Action, result.Command)
