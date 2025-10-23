@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.5] - 2025-01-23
+
+### Fixed
+- **WrapDynamic mode now correctly preserves `--` separator**
+  * Fixed parser to preserve `--` (double dash) as a positional argument in WrapDynamic mode
+  * Critical for `--toolexec` support where tools like `cgo` use `--` to separate tool flags from compiler flags
+  * Example: `mytool shim /path/to/compile -- -N -l file.go` now correctly passes `--` to the wrapped command
+  * Parser still switches to positional args state after `--`, but in dynamic mode the `--` token itself is preserved
+  * Backward compatible: normal wrapper mode and regular parsing continue to consume `--` as before
+  * Fixes wrapper-go-build example and other toolexec use cases
+
 ## [0.2.4] - 2025-01-21
 
 ### Fixed
