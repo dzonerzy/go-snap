@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.6] - 2025-01-23
+
+### Fixed
+- **WrapDynamic mode now treats all arguments as positional (no flag parsing)**
+  * Fixed parser to skip all flag parsing in WrapDynamic mode - all arguments are passed through verbatim
+  * Prevents buildid values like `-hoFVZqR4drSyI4v9P4l` from being parsed as `-h` help flag
+  * Critical for `--toolexec` wrappers that receive compiler arguments containing flag-like strings
+  * Example: `mytool track /path/to/compile -buildid -hoF.../-hoF... -o test.a` now passes through correctly
+  * Added defense-in-depth in app.go to bypass help execution in dynamic mode even if help flag gets set
+  * Makes dynamic wrappers truly transparent - correct behavior for toolexec use case
+  * No impact on normal (non-dynamic) command parsing or wrapper modes
+
 ## [0.2.5] - 2025-01-23
 
 ### Fixed
